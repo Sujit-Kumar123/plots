@@ -1,0 +1,152 @@
+name: mvp-dev
+
+services:
+
+  # ── App: FastAPI + Next.js + Nginx (single container, hot-reload) ─────────────
+  app:
+    build:
+      context: .
+      dockerfile: docker/dev/Dockerfile
+    container_name: mvp-app-dev
+    restart: no
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-mvp_user}:${POSTGRES_PASSWORD:-mvp_pass}@postgres:5432/${POSTGRES_DB:-mvp_db}
+      REDIS_URL: redis://${REDIS_PASSWORD:+:${REDIS_PASSWORD}@}redis:6379/${REDIS_DB:-0}
+    ports:
+      - "${APP_PORT:-80}:80"
+    volumes:
+      # Source code — live-reloaded by uvicorn (--reload) and Next.js HMR
+      - ./backend:/app/backend
+      - ./frontend:/app/frontend
+      # Root .env mounted as Next.js .env.local so dev server reads NEXT_PUBLIC_* vars
+      - ./.env:/app/frontend/.env.local:ro
+      # Nginx + supervisor configs — volume-mounted so edits take effect without rebuild
+      - ./docker/nginx/nginx.conf:/etc/nginx/conf.d/app.conf:ro
+      - ./docker/supervisord.dev.conf:/etc/supervisor/conf.d/app.conf:ro
+      # Preserve installed packages (avoid overwriting with empty host dirs)
+      - venv_data:/app/backend/.venv
+      - node_modules_data:/app/frontend/node_modules
+      - next_cache:/app/frontend/.next
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - app_network
+
+  # ── Celery worker (dev, autoreload) ────────────────────────────────────────
+  worker:
+    build:
+      context: .
+      dockerfile: docker/dev/Dockerfile
+    container_name: mvp-worker-dev
+    restart: no
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-mvp_user}:${POSTGRES_PASSWORD:-mvp_pass}@postgres:5432/${POSTGRES_DB:-mvp_db}
+      REDIS_URL: redis://${REDIS_PASSWORD:+:${REDIS_PASSWORD}@}redis:6379/${REDIS_DB:-0}
+    command: >
+      /app/backend/.venv/bin/celery -A app.worker.celery_app worker
+      --loglevel=info --autoreload
+    working_dir: /app/backend
+    volumes:
+      - ./backend:/app/backend
+      - venv_data:/app/backend/.venv
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - app_network
+
+  # ── PostgreSQL ──────────────────────────────────────────────────────────────
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: mvp-postgres-dev
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-mvp_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-mvp_pass}
+      POSTGRES_DB: ${POSTGRES_DB:-mvp_db}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-mvp_user} -d ${POSTGRES_DB:-mvp_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - app_network
+
+  # ── pgAdmin ─────────────────────────────────────────────────────────────────
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: mvp-pgadmin-dev
+    restart: unless-stopped
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:-admin@mvp.dev}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:-admin}
+      PGADMIN_LISTEN_PORT: ${PGADMIN_PORT:-5050}
+    ports:
+      - "${PGADMIN_PORT:-5050}:${PGADMIN_PORT:-5050}"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - app_network
+
+  # ── Redis ───────────────────────────────────────────────────────────────────
+  redis:
+    image: redis:7.2-alpine
+    container_name: mvp-redis-dev
+    restart: unless-stopped
+    entrypoint: >
+      sh -c "
+        ARGS=\"--port 6379\";
+        if [ -n \"$$REDIS_PASSWORD\" ]; then
+          ARGS=\"$$ARGS --requirepass $$REDIS_PASSWORD\";
+        fi;
+        exec redis-server $$ARGS
+      "
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    healthcheck:
+      test: ["CMD", "sh", "-c", "redis-cli -p 6379 ${REDIS_PASSWORD:+-a $REDIS_PASSWORD} ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    networks:
+      - app_network
+
+  # ── Redis Commander ─────────────────────────────────────────────────────────
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    container_name: mvp-redis-gui-dev
+    restart: unless-stopped
+    environment:
+      REDIS_HOSTS: "mvp:redis:6379:${REDIS_DB:-0}:${REDIS_PASSWORD:-}"
+      HTTP_USER: ${REDIS_COMMANDER_USER:-admin}
+      HTTP_PASSWORD: ${REDIS_COMMANDER_PASSWORD:-admin}
+      PORT: ${REDIS_COMMANDER_PORT:-8081}
+    ports:
+      - "${REDIS_COMMANDER_PORT:-8081}:${REDIS_COMMANDER_PORT:-8081}"
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - app_network
+
+volumes:
+  postgres_data:
+  venv_data:
+  node_modules_data:
+  next_cache:
+
+networks:
+  app_network:
+    driver: bridge

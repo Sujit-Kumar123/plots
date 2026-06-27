@@ -1,0 +1,39 @@
+# Git
+.git/
+
+# Node
+**/node_modules/
+**/.next/
+frontend/.env.local
+frontend/.env*.local
+
+# Python
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+**/.venv/
+**/venv/
+**/*.egg-info/
+**/.pytest_cache/
+**/.ruff_cache/
+**/.mypy_cache/
+**/htmlcov/
+**/.coverage
+
+# Logs
+**/logs/
+**/*.log
+
+# IDE / OS
+.vscode/
+.idea/
+**/.DS_Store
+**/Thumbs.db
+
+# CI
+.github/
+
+# NOTE: Root .env is intentionally NOT excluded — it is COPY'd into the
+# frontend build stage so Next.js can inline NEXT_PUBLIC_* vars at build time.
+# Sensitive backend-only secrets should be passed via docker-compose env_file
+# or Docker secrets at runtime, not at build time.

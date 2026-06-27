@@ -1,0 +1,97 @@
+name: mvp
+
+services:
+
+  # ── App: FastAPI + Next.js + Nginx (single container) ────────────────────────
+  app:
+    build:
+      context: .
+      dockerfile: docker/prod/Dockerfile
+    container_name: mvp-app
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      REDIS_URL: redis://${REDIS_PASSWORD:+:${REDIS_PASSWORD}@}redis:6379/${REDIS_DB:-0}
+    ports:
+      - "80:80"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - app_network
+
+  # ── Celery worker ──────────────────────────────────────────────────────────
+  worker:
+    build:
+      context: .
+      dockerfile: docker/prod/Dockerfile.worker
+    container_name: mvp-worker
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      REDIS_URL: redis://${REDIS_PASSWORD:+:${REDIS_PASSWORD}@}redis:6379/${REDIS_DB:-0}
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - app_network
+
+  # ── PostgreSQL ──────────────────────────────────────────────────────────────
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: mvp-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    expose:
+      - "5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - app_network
+
+  # ── Redis ───────────────────────────────────────────────────────────────────
+  redis:
+    image: redis:7.2-alpine
+    container_name: mvp-redis
+    restart: unless-stopped
+    entrypoint: >
+      sh -c "
+        ARGS=\"--port 6379 --save 60 1 --loglevel warning\";
+        if [ -n \"$$REDIS_PASSWORD\" ]; then
+          ARGS=\"$$ARGS --requirepass $$REDIS_PASSWORD\";
+        fi;
+        exec redis-server $$ARGS
+      "
+    expose:
+      - "6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "sh", "-c", "redis-cli -p 6379 ${REDIS_PASSWORD:+-a $REDIS_PASSWORD} ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    networks:
+      - app_network
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  app_network:
+    driver: bridge
