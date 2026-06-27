@@ -25,6 +25,7 @@ A full-stack monorepo for shipping production-ready MVPs fast.
 - [Testing](#testing)
 - [API Reference](#api-reference)
 - [Adding a New Backend Module](#adding-a-new-backend-module)
+- [Google OAuth2 Token Setup](#google-oauth2-token-setup)
 - [CI/CD](#cicd)
 
 ---
@@ -560,6 +561,76 @@ make migrate
 ```
 
 5. **Write tests** in `backend/tests/test_your_module/`.
+
+---
+
+## Google OAuth2 Token Setup
+
+This section documents how to manually obtain OAuth2 credentials for Google APIs (e.g. Gmail, Drive).
+
+### Step 1 — Get an authorization code
+
+Open the following URL in a browser (replace placeholders with your values):
+
+```
+https://accounts.google.com/o/oauth2/auth
+  ?client_id=<GOOGLE_CLIENT_ID>
+  &redirect_uri=<REDIRECT_URI>
+  &response_type=code
+  &scope=https://www.googleapis.com/auth/gmail.send
+  &access_type=offline
+```
+
+After the user consents, Google redirects to `<REDIRECT_URI>?code=<AUTH_CODE>`.
+
+**Example (Drive scope):**
+
+```
+https://accounts.google.com/o/oauth2/auth?client_id=<GOOGLE_CLIENT_ID>&redirect_uri=https://yourapp.com/api/v1/google/callback&response_type=code&scope=https://www.googleapis.com/auth/drive&access_type=offline
+```
+
+Redirect received:
+
+```
+https://yourapp.com/api/v1/google/callback?code=<AUTH_CODE>&scope=https://www.googleapis.com/auth/drive
+```
+
+### Step 2 — Exchange the code for a refresh token
+
+```bash
+curl --request POST \
+  --data "code=<AUTH_CODE>\
+&client_id=<GOOGLE_CLIENT_ID>\
+&client_secret=<GOOGLE_CLIENT_SECRET>\
+&redirect_uri=<REDIRECT_URI>\
+&grant_type=authorization_code" \
+  https://oauth2.googleapis.com/token
+```
+
+> The `refresh_token` is only returned on the **first** authorization. Store it securely — it does not expire unless revoked.
+
+**Example:**
+
+```bash
+curl --request POST \
+  --data "code=<AUTH_CODE>&client_id=<GOOGLE_CLIENT_ID>&client_secret=<GOOGLE_CLIENT_SECRET>&redirect_uri=https://yourapp.com/api/v1/google/callback&grant_type=authorization_code" \
+  https://oauth2.googleapis.com/token
+```
+
+### Step 3 — Generate a new access token from the refresh token
+
+Access tokens expire after ~1 hour. Use the refresh token to get a new one without user interaction:
+
+```bash
+curl --request POST \
+  --data "client_id=<GOOGLE_CLIENT_ID>\
+&client_secret=<GOOGLE_CLIENT_SECRET>\
+&refresh_token=<REFRESH_TOKEN>\
+&grant_type=refresh_token" \
+  https://oauth2.googleapis.com/token
+```
+
+Store `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, and `REFRESH_TOKEN` in your root `.env` file.
 
 ---
 
