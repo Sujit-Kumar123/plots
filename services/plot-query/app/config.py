@@ -10,9 +10,13 @@ class Settings(BaseSettings):
     database_url: str = "postgresql+asyncpg://mvp_user:mvp_pass@postgres:5432/mvp_db"
     db_pool_size: int = 20
     db_max_overflow: int = 40
+    db_pool_timeout: int = 30
+    db_pool_recycle: int = 1800
 
     kafka_bootstrap_servers: str = "kafka:9092"
     kafka_consumer_group: str = "plot-query-projector"
+    kafka_consumer_max_retries: int = 3
+    kafka_consumer_retry_backoff: float = 0.5
     topic_plot_events: str = "plot.events"
     topic_plot_bulk: str = "plot.bulk.commands"
 

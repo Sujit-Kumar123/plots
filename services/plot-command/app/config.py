@@ -10,14 +10,18 @@ class Settings(BaseSettings):
     database_url: str = "postgresql+asyncpg://mvp_user:mvp_pass@postgres:5432/mvp_db"
     db_pool_size: int = 10
     db_max_overflow: int = 20
+    db_pool_timeout: int = 30
+    db_pool_recycle: int = 1800
 
     kafka_bootstrap_servers: str = "kafka:9092"
     kafka_producer_acks: str = "all"
+    kafka_request_timeout_ms: int = 30_000
+    kafka_retry_backoff_ms: int = 500
+    kafka_publish_retries: int = 3
 
     topic_plot_events: str = "plot.events"
     topic_plot_bulk: str = "plot.bulk.commands"
 
-    # Max elements allowed in a single plot (guard against oversized payloads)
     max_plot_elements: int = 10_000
 
 

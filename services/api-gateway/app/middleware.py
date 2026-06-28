@@ -4,7 +4,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 
 from app.config import settings
 
-_SKIP_PATHS = {"/health", "/docs", "/openapi.json", "/redoc"}
+_SKIP_PATHS = {"/health", "/health/ready", "/docs", "/openapi.json", "/redoc"}
 
 
 class JWTAuthMiddleware(BaseHTTPMiddleware):
