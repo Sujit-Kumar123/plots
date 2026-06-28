@@ -2,24 +2,27 @@ name: CI
 
 on:
   pull_request:
-    branches: [main]
   push:
     branches: [main]
 
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
+  # ── Backend: lint + test ────────────────────────────────────────────────────
   backend:
     name: Backend — lint & test
     runs-on: ubuntu-latest
 
     services:
       postgres:
-        image: postgres:16
+        image: pgvector/pgvector:pg16
         env:
           POSTGRES_USER: mvp_user
           POSTGRES_PASSWORD: mvp_pass
           POSTGRES_DB: mvp_test_db
-        ports:
-          - 5432:5432
+        ports: ["5432:5432"]
         options: >-
           --health-cmd pg_isready
           --health-interval 10s
@@ -29,32 +32,45 @@ jobs:
     env:
       DATABASE_URL: postgresql+asyncpg://mvp_user:mvp_pass@localhost:5432/mvp_test_db
       REDIS_URL: redis://localhost:6379/0
-      SECRET_KEY: test-secret-key
+      SECRET_KEY: ci-test-secret-key-not-for-production
       APP_ENV: testing
+      AUTH_EMAIL_ENABLED: "true"
+      AUTH_GOOGLE_ENABLED: "false"
+      AUTH_AZURE_ENABLED: "false"
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install uv
+      - name: Set up uv
         uses: astral-sh/setup-uv@v4
+        with:
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
 
-      - name: Set up Python
+      - name: Set up Python 3.12
         run: uv python install 3.12
 
       - name: Install dependencies
         working-directory: backend
         run: uv sync --extra dev
 
-      - name: Lint
+      - name: Ruff — lint
         working-directory: backend
-        run: |
-          uv run ruff check .
-          uv run ruff format --check .
+        run: uv run ruff check .
+
+      - name: Ruff — format check
+        working-directory: backend
+        run: uv run ruff format --check .
+
+      - name: Apply migrations
+        working-directory: backend
+        run: uv run alembic upgrade head
 
       - name: Run tests
         working-directory: backend
-        run: uv run pytest tests/ -v
+        run: uv run pytest tests/ -v --tb=short --no-header
 
+  # ── Frontend: lint + type-check ─────────────────────────────────────────────
   frontend:
     name: Frontend — lint & type-check
     runs-on: ubuntu-latest
@@ -64,6 +80,15 @@ jobs:
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Cache node_modules
+        uses: actions/cache@v4
+        with:
+          path: frontend/node_modules
+          key: bun-${{ hashFiles('frontend/bun.lockb') }}
+          restore-keys: bun-
 
       - name: Install dependencies
         working-directory: frontend
@@ -76,3 +101,20 @@ jobs:
       - name: Type check
         working-directory: frontend
         run: bun run tsc --noEmit
+
+  # ── Compose: validate all three stacks ─────────────────────────────────────
+  compose-validate:
+    name: Compose — validate configs
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate docker-compose.yml (production)
+        run: docker compose -f docker-compose.yml config --quiet
+
+      - name: Validate docker-compose.dev.yml (development)
+        run: docker compose -f docker-compose.dev.yml config --quiet
+
+      - name: Validate docker-compose.cqrs.yml (CQRS microservices)
+        run: docker compose -f docker-compose.cqrs.yml config --quiet

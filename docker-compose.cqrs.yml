@@ -1,0 +1,200 @@
+version: "3.9"
+
+# Local CQRS development stack.
+# Start: docker compose -f docker-compose.cqrs.yml up --build
+# Depends on the root .env file for secrets.
+
+x-service-defaults: &service-defaults
+  restart: unless-stopped
+  networks:
+    - cqrs_net
+
+x-db-env: &db-env
+  DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-mvp_user}:${POSTGRES_PASSWORD:-mvp_pass}@postgres:5432/${POSTGRES_DB:-mvp_db}
+
+x-kafka-env: &kafka-env
+  KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+
+services:
+
+  # ── Infrastructure ──────────────────────────────────────────────────────────
+
+  postgres:
+    <<: *service-defaults
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-mvp_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-mvp_pass}
+      POSTGRES_DB: ${POSTGRES_DB:-mvp_db}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - cqrs_postgres_data:/var/lib/postgresql/data
+      - ./scripts/init-schemas.sql:/docker-entrypoint-initdb.d/init-schemas.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-mvp_user}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  zookeeper:
+    <<: *service-defaults
+    image: confluentinc/cp-zookeeper:7.6.0
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    volumes:
+      - cqrs_zookeeper_data:/var/lib/zookeeper
+
+  kafka:
+    <<: *service-defaults
+    image: confluentinc/cp-kafka:7.6.0
+    depends_on:
+      - zookeeper
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_DEFAULT_REPLICATION_FACTOR: 1
+      KAFKA_MIN_INSYNC_REPLICAS: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+    volumes:
+      - cqrs_kafka_data:/var/lib/kafka/data
+    healthcheck:
+      test: ["CMD-SHELL", "kafka-broker-api-versions --bootstrap-server localhost:9092"]
+      interval: 10s
+      timeout: 10s
+      retries: 15
+
+  kafka-init:
+    <<: *service-defaults
+    image: confluentinc/cp-kafka:7.6.0
+    depends_on:
+      kafka:
+        condition: service_healthy
+    entrypoint: ["/bin/bash", "-c"]
+    command:
+      - |
+        kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic chat.events         --partitions 4 --replication-factor 1
+        kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic chat.bulk.commands  --partitions 2 --replication-factor 1
+        kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic plot.events         --partitions 4 --replication-factor 1
+        kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic plot.bulk.commands  --partitions 2 --replication-factor 1
+        echo "Topics created."
+    restart: "no"
+
+  kafka-ui:
+    <<: *service-defaults
+    image: provectuslabs/kafka-ui:latest
+    depends_on:
+      - kafka
+    ports:
+      - "8090:8080"
+    environment:
+      KAFKA_CLUSTERS_0_NAME: local
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
+
+  # ── Microservices ───────────────────────────────────────────────────────────
+
+  api-gateway:
+    <<: *service-defaults
+    build:
+      context: ./services/api-gateway
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    depends_on:
+      - chat-command
+      - chat-query
+      - plot-command
+      - plot-query
+    environment:
+      SECRET_KEY: ${SECRET_KEY:-dev-secret-change-me}
+      CHAT_COMMAND_URL: http://chat-command:8001
+      CHAT_QUERY_URL: http://chat-query:8002
+      PLOT_COMMAND_URL: http://plot-command:8003
+      PLOT_QUERY_URL: http://plot-query:8004
+      DEBUG: "true"
+    volumes:
+      - ./services/api-gateway/app:/app/app
+
+  chat-command:
+    <<: *service-defaults
+    build:
+      context: ./services/chat-command
+      dockerfile: Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    environment:
+      <<: [*db-env, *kafka-env]
+      DEBUG: "true"
+    volumes:
+      - ./services/chat-command/app:/app/app
+
+  chat-query:
+    <<: *service-defaults
+    build:
+      context: ./services/chat-query
+      dockerfile: Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
+    environment:
+      <<: [*db-env, *kafka-env]
+      DEBUG: "true"
+    volumes:
+      - ./services/chat-query/app:/app/app
+
+  plot-command:
+    <<: *service-defaults
+    build:
+      context: ./services/plot-command
+      dockerfile: Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    environment:
+      <<: [*db-env, *kafka-env]
+      DEBUG: "true"
+    volumes:
+      - ./services/plot-command/app:/app/app
+
+  plot-query:
+    <<: *service-defaults
+    build:
+      context: ./services/plot-query
+      dockerfile: Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
+    environment:
+      <<: [*db-env, *kafka-env]
+      DEBUG: "true"
+    volumes:
+      - ./services/plot-query/app:/app/app
+
+networks:
+  cqrs_net:
+    driver: bridge
+
+volumes:
+  cqrs_postgres_data:
+  cqrs_zookeeper_data:
+  cqrs_kafka_data:

@@ -1,0 +1,1184 @@
+<title>Deployment — Plots</title>
+<meta name="description" content="Complete deployment guide for the Plots monorepo — GitHub Actions CI/CD pipelines, Docker Compose stacks, and Kubernetes deployment with rollback procedures.">
+
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:        #07111E;
+    --surface:   #0E1A2E;
+    --surface2:  #152238;
+    --border:    #1B3050;
+    --border2:   #243D5C;
+    --text:      #E2EAF4;
+    --muted:     #6B84A0;
+    --faint:     #3A5272;
+
+    --blue:      #3B82F6;
+    --blue-dim:  #1D4ED8;
+    --blue-glow: rgba(59,130,246,.15);
+    --green:     #10B981;
+    --green-glow:rgba(16,185,129,.13);
+    --amber:     #F59E0B;
+    --amber-glow:rgba(245,158,11,.12);
+    --red:       #EF4444;
+    --red-glow:  rgba(239,68,68,.12);
+    --violet:    #8B5CF6;
+    --violet-glow:rgba(139,92,246,.13);
+    --cyan:      #06B6D4;
+
+    --mono: 'Cascadia Code', 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+    --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+    --radius: 10px;
+    --radius-sm: 6px;
+  }
+
+  html { scroll-behavior: smooth; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: 15px;
+    line-height: 1.65;
+    min-height: 100vh;
+  }
+
+  /* ── Sidebar nav ─────────────────────────────────────────────────────── */
+  .layout { display: flex; min-height: 100vh; }
+
+  .sidebar {
+    width: 228px;
+    flex-shrink: 0;
+    position: fixed;
+    top: 0; left: 0; bottom: 0;
+    overflow-y: auto;
+    border-right: 1px solid var(--border);
+    background: var(--surface);
+    padding: 24px 0 40px;
+    z-index: 50;
+  }
+
+  .sidebar-logo {
+    padding: 0 20px 20px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 20px;
+  }
+  .sidebar-logo-name {
+    font-size: 14px;
+    font-weight: 700;
+    color: #fff;
+    letter-spacing: -.02em;
+  }
+  .sidebar-logo-sub {
+    font-size: 11.5px;
+    color: var(--muted);
+    font-family: var(--mono);
+    margin-top: 2px;
+  }
+
+  .nav-group { margin-bottom: 6px; }
+  .nav-group-title {
+    padding: 6px 20px 4px;
+    font-size: 10.5px;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--faint);
+    font-weight: 600;
+  }
+  .nav-link {
+    display: block;
+    padding: 6px 20px;
+    font-size: 13px;
+    color: var(--muted);
+    text-decoration: none;
+    transition: color .15s, background .15s;
+    border-left: 2px solid transparent;
+  }
+  .nav-link:hover { color: var(--text); background: var(--surface2); }
+  .nav-link.active { color: var(--blue); border-left-color: var(--blue); background: var(--blue-glow); }
+
+  /* ── Main content ────────────────────────────────────────────────────── */
+  .main {
+    margin-left: 228px;
+    flex: 1;
+    max-width: 860px;
+    padding: 52px 48px 100px;
+  }
+
+  /* ── Hero ────────────────────────────────────────────────────────────── */
+  .hero {
+    margin-bottom: 64px;
+  }
+  .hero-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    background: var(--blue-glow);
+    border: 1px solid rgba(59,130,246,.3);
+    border-radius: 999px;
+    padding: 5px 14px;
+    font-size: 11.5px;
+    font-family: var(--mono);
+    color: var(--blue);
+    letter-spacing: .04em;
+    margin-bottom: 20px;
+  }
+  .hero h1 {
+    font-size: clamp(26px, 4.5vw, 40px);
+    font-weight: 700;
+    letter-spacing: -.03em;
+    line-height: 1.15;
+    color: #fff;
+    text-wrap: balance;
+    margin-bottom: 14px;
+  }
+  .hero h1 em {
+    font-style: normal;
+    background: linear-gradient(135deg, var(--blue) 0%, var(--violet) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  .hero p {
+    color: var(--muted);
+    max-width: 560px;
+    font-size: 15px;
+  }
+
+  /* ── Section headings ────────────────────────────────────────────────── */
+  .section { margin-bottom: 64px; }
+  .section-anchor { display: block; margin-top: -72px; padding-top: 72px; }
+
+  h2 {
+    font-size: 20px;
+    font-weight: 700;
+    color: #fff;
+    letter-spacing: -.02em;
+    margin-bottom: 6px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  h2 .h2-icon {
+    width: 30px; height: 30px;
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 15px; flex-shrink: 0;
+  }
+  .section-lead {
+    color: var(--muted);
+    font-size: 14px;
+    margin-bottom: 28px;
+    padding-bottom: 20px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  h3 {
+    font-size: 15.5px;
+    font-weight: 600;
+    color: #fff;
+    margin: 28px 0 12px;
+  }
+
+  /* ── Pipeline diagram ────────────────────────────────────────────────── */
+  .pipeline {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    padding: 28px 0 24px;
+    overflow-x: auto;
+    margin-bottom: 32px;
+  }
+
+  .pipe-stage {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    min-width: 100px;
+  }
+
+  .pipe-node {
+    width: 52px; height: 52px;
+    border-radius: 14px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 22px;
+    position: relative;
+  }
+  .pipe-node::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: 14px;
+    border: 1px solid currentColor;
+    opacity: .35;
+  }
+
+  .pipe-label {
+    font-size: 11.5px;
+    font-family: var(--mono);
+    color: var(--muted);
+    text-align: center;
+    line-height: 1.3;
+  }
+
+  .pipe-arrow {
+    flex: 1;
+    height: 2px;
+    min-width: 20px;
+    max-width: 44px;
+    background: var(--border2);
+    position: relative;
+    margin-bottom: 20px;
+    flex-shrink: 0;
+  }
+  .pipe-arrow::after {
+    content: '';
+    position: absolute;
+    right: -1px; top: -3px;
+    width: 0; height: 0;
+    border-top: 4px solid transparent;
+    border-bottom: 4px solid transparent;
+    border-left: 6px solid var(--border2);
+  }
+
+  .node-push    { background: rgba(59,130,246,.12);  color: var(--blue); }
+  .node-ci      { background: rgba(16,185,129,.12);  color: var(--green); }
+  .node-build   { background: rgba(139,92,246,.12);  color: var(--violet); }
+  .node-push-img{ background: rgba(6,182,212,.12);   color: var(--cyan); }
+  .node-deploy  { background: rgba(245,158,11,.12);  color: var(--amber); }
+  .node-live    { background: rgba(16,185,129,.12);  color: var(--green); }
+
+  /* ── Cards ───────────────────────────────────────────────────────────── */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px 22px;
+    margin-bottom: 14px;
+  }
+  .card:hover { border-color: var(--border2); }
+
+  .card-title {
+    font-size: 14.5px;
+    font-weight: 600;
+    color: #fff;
+    margin-bottom: 6px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .card-desc {
+    font-size: 13.5px;
+    color: var(--muted);
+    margin-bottom: 14px;
+    line-height: 1.55;
+  }
+
+  /* ── Code / command ──────────────────────────────────────────────────── */
+  .cmd-block {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+    margin-bottom: 10px;
+  }
+  .cmd-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 7px 14px;
+    border-bottom: 1px solid var(--border);
+    background: rgba(0,0,0,.2);
+  }
+  .cmd-file {
+    font-size: 11.5px;
+    font-family: var(--mono);
+    color: var(--muted);
+  }
+  .cmd-copy-btn {
+    font-size: 11.5px;
+    font-family: var(--mono);
+    background: none;
+    border: none;
+    color: var(--faint);
+    cursor: pointer;
+    padding: 2px 6px;
+    border-radius: 4px;
+    transition: color .15s, background .15s;
+  }
+  .cmd-copy-btn:hover { color: var(--blue); background: var(--blue-glow); }
+  .cmd-copy-btn.copied { color: var(--green); }
+
+  pre.cmd-pre {
+    padding: 14px 16px;
+    font-family: var(--mono);
+    font-size: 12.5px;
+    line-height: 1.7;
+    color: var(--text);
+    overflow-x: auto;
+    white-space: pre;
+  }
+  .cm { color: var(--faint); }
+  .ck { color: var(--blue); }
+  .cv { color: var(--green); }
+  .cs { color: #F59E0B; }
+  .cp { color: var(--violet); }
+
+  /* ── Inline code ─────────────────────────────────────────────────────── */
+  code {
+    font-family: var(--mono);
+    font-size: 12.5px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    padding: 1px 6px;
+    border-radius: 4px;
+    color: var(--text);
+  }
+
+  /* ── Step list ───────────────────────────────────────────────────────── */
+  .step-list { display: flex; flex-direction: column; gap: 12px; }
+  .step {
+    display: flex;
+    gap: 16px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 18px 20px;
+  }
+  .step-num {
+    width: 26px; height: 26px;
+    border-radius: 50%;
+    background: var(--blue-glow);
+    border: 1px solid rgba(59,130,246,.35);
+    color: var(--blue);
+    font-size: 12px;
+    font-weight: 700;
+    font-family: var(--mono);
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0; margin-top: 2px;
+  }
+  .step-body { flex: 1; }
+  .step-title { font-size: 14px; font-weight: 600; color: #fff; margin-bottom: 6px; }
+  .step-desc { font-size: 13.5px; color: var(--muted); margin-bottom: 10px; }
+
+  /* ── Table ───────────────────────────────────────────────────────────── */
+  .table-wrap { overflow-x: auto; border-radius: var(--radius); border: 1px solid var(--border); margin-bottom: 20px; }
+  table { width: 100%; border-collapse: collapse; }
+  thead { background: var(--surface2); }
+  th {
+    padding: 11px 16px;
+    font-size: 11.5px;
+    font-weight: 600;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    color: var(--muted);
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+  }
+  td {
+    padding: 11px 16px;
+    font-size: 13px;
+    color: var(--text);
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+  }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: rgba(255,255,255,.02); }
+  .required-badge {
+    display: inline-block;
+    font-size: 10px;
+    font-family: var(--mono);
+    padding: 2px 7px;
+    border-radius: 999px;
+    background: var(--red-glow);
+    color: var(--red);
+    border: 1px solid rgba(239,68,68,.3);
+  }
+  .optional-badge {
+    display: inline-block;
+    font-size: 10px;
+    font-family: var(--mono);
+    padding: 2px 7px;
+    border-radius: 999px;
+    background: var(--amber-glow);
+    color: var(--amber);
+    border: 1px solid rgba(245,158,11,.3);
+  }
+
+  /* ── Notice/alert ────────────────────────────────────────────────────── */
+  .notice {
+    border-radius: var(--radius-sm);
+    padding: 12px 16px;
+    font-size: 13.5px;
+    line-height: 1.55;
+    margin-bottom: 16px;
+    display: flex;
+    gap: 10px;
+  }
+  .notice-icon { flex-shrink: 0; font-size: 15px; margin-top: 1px; }
+  .notice-amber { background: var(--amber-glow); border: 1px solid rgba(245,158,11,.25); color: var(--amber); }
+  .notice-blue  { background: var(--blue-glow);  border: 1px solid rgba(59,130,246,.25);  color: #93C5FD; }
+  .notice-green { background: var(--green-glow); border: 1px solid rgba(16,185,129,.25); color: #6EE7B7; }
+  .notice-red   { background: var(--red-glow);   border: 1px solid rgba(239,68,68,.25);   color: #FCA5A5; }
+
+  /* ── Tags ────────────────────────────────────────────────────────────── */
+  .tag {
+    display: inline-block;
+    font-size: 11px;
+    font-family: var(--mono);
+    padding: 2px 9px;
+    border-radius: 999px;
+    margin-left: 6px;
+  }
+  .tag-blue   { background: var(--blue-glow);   color: var(--blue);   border: 1px solid rgba(59,130,246,.3); }
+  .tag-violet { background: var(--violet-glow); color: var(--violet); border: 1px solid rgba(139,92,246,.3); }
+  .tag-green  { background: var(--green-glow);  color: var(--green);  border: 1px solid rgba(16,185,129,.3); }
+  .tag-amber  { background: var(--amber-glow);  color: var(--amber);  border: 1px solid rgba(245,158,11,.3); }
+
+  /* ── Divider ─────────────────────────────────────────────────────────── */
+  .divider { height: 1px; background: var(--border); margin: 52px 0; }
+
+  /* ── Job row ─────────────────────────────────────────────────────────── */
+  .job-grid { display: flex; flex-direction: column; gap: 10px; }
+  .job-row {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 14px 18px;
+    display: flex;
+    align-items: flex-start;
+    gap: 14px;
+  }
+  .job-icon {
+    width: 34px; height: 34px;
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16px;
+    flex-shrink: 0;
+  }
+  .job-info { flex: 1; }
+  .job-name { font-size: 14px; font-weight: 600; color: #fff; margin-bottom: 3px; }
+  .job-desc { font-size: 13px; color: var(--muted); line-height: 1.5; }
+  .job-triggers { margin-top: 6px; display: flex; gap: 6px; flex-wrap: wrap; }
+
+  ::-webkit-scrollbar { height: 5px; width: 5px; }
+  ::-webkit-scrollbar-track { background: var(--surface); }
+  ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 999px; }
+
+  @media (max-width: 768px) {
+    .sidebar { display: none; }
+    .main { margin-left: 0; padding: 32px 20px 80px; }
+  }
+</style>
+
+<div class="layout">
+
+  <!-- ── Sidebar ─────────────────────────────────────────────────── -->
+  <nav class="sidebar">
+    <div class="sidebar-logo">
+      <div class="sidebar-logo-name">Plots</div>
+      <div class="sidebar-logo-sub">Deployment Guide</div>
+    </div>
+
+    <div class="nav-group">
+      <div class="nav-group-title">Overview</div>
+      <a class="nav-link" href="#pipeline">Pipeline Overview</a>
+      <a class="nav-link" href="#workflows">GitHub Workflows</a>
+      <a class="nav-link" href="#secrets">Required Secrets</a>
+    </div>
+
+    <div class="nav-group">
+      <div class="nav-group-title">CI Pipeline</div>
+      <a class="nav-link" href="#ci-backend">Backend (lint + test)</a>
+      <a class="nav-link" href="#ci-frontend">Frontend (lint + type)</a>
+      <a class="nav-link" href="#ci-compose">Compose Validate</a>
+    </div>
+
+    <div class="nav-group">
+      <div class="nav-group-title">CD Pipeline</div>
+      <a class="nav-link" href="#cd-build">Build Images</a>
+      <a class="nav-link" href="#cd-deploy">Deploy to K8s</a>
+      <a class="nav-link" href="#cd-smoke">Smoke Tests</a>
+    </div>
+
+    <div class="nav-group">
+      <div class="nav-group-title">Manual Deployment</div>
+      <a class="nav-link" href="#manual-dev">Monolith Dev</a>
+      <a class="nav-link" href="#manual-prod">Monolith Prod</a>
+      <a class="nav-link" href="#manual-cqrs">CQRS Stack</a>
+    </div>
+
+    <div class="nav-group">
+      <div class="nav-group-title">Kubernetes</div>
+      <a class="nav-link" href="#k8s-setup">Cluster Setup</a>
+      <a class="nav-link" href="#k8s-images">Build & Push</a>
+      <a class="nav-link" href="#k8s-apply">Apply Manifests</a>
+      <a class="nav-link" href="#k8s-rollback">Rollback</a>
+    </div>
+
+    <div class="nav-group">
+      <div class="nav-group-title">Reference</div>
+      <a class="nav-link" href="#image-registry">Image Registry</a>
+      <a class="nav-link" href="#env-promotion">Env Promotion</a>
+    </div>
+  </nav>
+
+  <!-- ── Main ────────────────────────────────────────────────────── -->
+  <main class="main">
+
+    <!-- Hero -->
+    <div class="hero">
+      <div class="hero-badge">🚀 CI / CD</div>
+      <h1>Deploying <em>Plots</em></h1>
+      <p>GitHub Actions pipelines, Docker image publishing to GHCR, and Kubernetes rollouts — all from a single <code>git push</code>.</p>
+    </div>
+
+    <!-- ── Pipeline Overview ──────────────────────────────────────── -->
+    <span class="section-anchor" id="pipeline"></span>
+    <div class="section">
+      <h2><span class="h2-icon" style="background:rgba(59,130,246,.12);color:var(--blue)">⚡</span>Pipeline Overview</h2>
+      <p class="section-lead">Every push to <code>main</code> flows through two chained workflows: CI runs first, then CD if CI passes.</p>
+
+      <div class="pipeline">
+        <div class="pipe-stage">
+          <div class="pipe-node node-push">📦</div>
+          <div class="pipe-label">git push<br>to main</div>
+        </div>
+        <div class="pipe-arrow"></div>
+        <div class="pipe-stage">
+          <div class="pipe-node node-ci">✓</div>
+          <div class="pipe-label">CI<br>lint / test</div>
+        </div>
+        <div class="pipe-arrow"></div>
+        <div class="pipe-stage">
+          <div class="pipe-node node-build">🔨</div>
+          <div class="pipe-label">Build<br>7 images</div>
+        </div>
+        <div class="pipe-arrow"></div>
+        <div class="pipe-stage">
+          <div class="pipe-node node-push-img">⬆</div>
+          <div class="pipe-label">Push<br>to GHCR</div>
+        </div>
+        <div class="pipe-arrow"></div>
+        <div class="pipe-stage">
+          <div class="pipe-node node-deploy">☸</div>
+          <div class="pipe-label">Deploy<br>K8s rollout</div>
+        </div>
+        <div class="pipe-arrow"></div>
+        <div class="pipe-stage">
+          <div class="pipe-node node-live">🟢</div>
+          <div class="pipe-label">Live<br>smoke test</div>
+        </div>
+      </div>
+
+      <div class="notice notice-blue">
+        <span class="notice-icon">ℹ</span>
+        <span>CI and CD are separate workflow files. CI runs on every pull request and push. CD runs only on pushes to <code>main</code> and requires all CI jobs to pass first because both workflows are triggered by the same event and GitHub will queue the CD deployment step after CI completes via <code>needs:</code>.</span>
+      </div>
+    </div>
+
+    <!-- ── Workflows ──────────────────────────────────────────────── -->
+    <span class="section-anchor" id="workflows"></span>
+    <div class="section">
+      <h2><span class="h2-icon" style="background:rgba(139,92,246,.12);color:var(--violet)">📄</span>GitHub Workflow Files</h2>
+      <p class="section-lead">Two files live in <code>.github/workflows/</code>.</p>
+
+      <div class="job-grid">
+        <div class="job-row">
+          <div class="job-icon" style="background:rgba(16,185,129,.1);color:var(--green)">✓</div>
+          <div class="job-info">
+            <div class="job-name">ci.yml <span class="tag tag-green">always runs</span></div>
+            <div class="job-desc">Runs on every pull request and every push to <code>main</code>. Contains three parallel jobs: backend lint+test, frontend lint+type-check, and Docker Compose config validation. Failing CI blocks the CD deployment.</div>
+            <div class="job-triggers">
+              <span class="tag tag-blue">pull_request</span>
+              <span class="tag tag-blue">push → main</span>
+            </div>
+          </div>
+        </div>
+        <div class="job-row">
+          <div class="job-icon" style="background:rgba(245,158,11,.1);color:var(--amber)">🚀</div>
+          <div class="job-info">
+            <div class="job-name">cd.yml <span class="tag tag-amber">main only</span></div>
+            <div class="job-desc">Runs only on pushes to <code>main</code>. Builds 7 Docker images in parallel (monolith app, celery worker, 5 CQRS services), pushes them to GHCR tagged with the short SHA, then deploys to the <code>plots-system</code> K8s namespace and runs smoke tests.</div>
+            <div class="job-triggers">
+              <span class="tag tag-amber">push → main</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Required Secrets ───────────────────────────────────────── -->
+    <span class="section-anchor" id="secrets"></span>
+    <div class="section">
+      <h2><span class="h2-icon" style="background:rgba(239,68,68,.12);color:var(--red)">🔑</span>Required GitHub Secrets</h2>
+      <p class="section-lead">Set these in <strong>Settings → Secrets and variables → Actions</strong> in your GitHub repository. <code>GITHUB_TOKEN</code> is provided automatically — never add it manually.</p>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Secret name</th>
+              <th>Used in</th>
+              <th>Description</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>GITHUB_TOKEN</code></td>
+              <td>cd.yml — push to GHCR</td>
+              <td>Auto-injected by GitHub Actions. Grants write access to the repository's container registry.</td>
+              <td><span class="required-badge">auto</span></td>
+            </tr>
+            <tr>
+              <td><code>KUBECONFIG_B64</code></td>
+              <td>cd.yml — kubectl deploy</td>
+              <td>Base64-encoded kubeconfig file for your target cluster. Generate with <code>base64 -w0 ~/.kube/config</code>.</td>
+              <td><span class="required-badge">required</span></td>
+            </tr>
+            <tr>
+              <td><code>SECRET_KEY</code></td>
+              <td>k8s/secrets.yaml</td>
+              <td>JWT signing secret for the production app. Store in K8s Secret, not directly in GitHub Actions.</td>
+              <td><span class="required-badge">required</span></td>
+            </tr>
+            <tr>
+              <td><code>POSTGRES_PASSWORD</code></td>
+              <td>k8s/secrets.yaml</td>
+              <td>PostgreSQL password for the production database. Managed via K8s Secret.</td>
+              <td><span class="required-badge">required</span></td>
+            </tr>
+            <tr>
+              <td><code>SENDGRID_API_KEY</code></td>
+              <td>k8s/secrets.yaml</td>
+              <td>Only needed if email notifications are enabled in production.</td>
+              <td><span class="optional-badge">optional</span></td>
+            </tr>
+            <tr>
+              <td><code>AZURE_STORAGE_CONNECTION_STRING</code></td>
+              <td>k8s/secrets.yaml</td>
+              <td>Only needed if file uploads are enabled in production.</td>
+              <td><span class="optional-badge">optional</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="notice notice-amber">
+        <span class="notice-icon">⚠</span>
+        <span>Sensitive values like <code>POSTGRES_PASSWORD</code> and <code>SECRET_KEY</code> should live in Kubernetes Secrets, not directly in GitHub Actions environment variables. The CD workflow applies <code>k8s/secrets.yaml</code> which reads from these K8s secrets at runtime.</span>
+      </div>
+    </div>
+
+    <div class="divider"></div>
+
+    <!-- ── CI: Backend ────────────────────────────────────────────── -->
+    <span class="section-anchor" id="ci-backend"></span>
+    <div class="section">
+      <h2><span class="h2-icon" style="background:rgba(16,185,129,.1);color:var(--green)">🐍</span>CI — Backend <span class="tag tag-green">ci.yml</span></h2>
+      <p class="section-lead">Runs on every PR and push. Spins up a real PostgreSQL 16 + pgvector service container for integration tests.</p>
+
+      <div class="job-grid">
+        <div class="job-row">
+          <div class="job-icon" style="background:rgba(59,130,246,.1);color:var(--blue)">1</div>
+          <div class="job-info">
+            <div class="job-name">Setup uv + Python 3.12</div>
+            <div class="job-desc">Uses <code>astral-sh/setup-uv@v4</code> with caching keyed on <code>backend/uv.lock</code> — subsequent runs skip the install step entirely.</div>
+          </div>
+        </div>
+        <div class="job-row">
+          <div class="job-icon" style="background:rgba(59,130,246,.1);color:var(--blue)">2</div>
+          <div class="job-info">
+            <div class="job-name">Ruff — lint + format check</div>
+            <div class="job-desc">Runs <code>ruff check .</code> (style/error rules) and <code>ruff format --check .</code> (formatting). Fails fast on first violation.</div>
+          </div>
+        </div>
+        <div class="job-row">
+          <div class="job-icon" style="background:rgba(59,130,246,.1);color:var(--blue)">3</div>
+          <div class="job-info">
+            <div class="job-name">Alembic migrations</div>
+            <div class="job-desc">Runs <code>alembic upgrade head</code> against the PostgreSQL service container to verify all migrations apply cleanly before tests run.</div>
+          </div>
+        </div>
+        <div class="job-row">
+          <div class="job-icon" style="background:rgba(59,130,246,.1);color:var(--blue)">4</div>
+          <div class="job-info">
+            <div class="job-name">Pytest</div>
+            <div class="job-desc">Runs the full test suite in <code>backend/tests/</code> with verbose output. The <code>DATABASE_URL</code>, <code>REDIS_URL</code>, and <code>SECRET_KEY</code> env vars are set to safe CI values.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── CI: Frontend ───────────────────────────────────────────── -->
+    <span class="section-anchor" id="ci-frontend"></span>
+    <div class="section">
+      <h2><span class="h2-icon" style="background:rgba(59,130,246,.1);color:var(--blue)">⚛</span>CI — Frontend <span class="tag tag-blue">ci.yml</span></h2>
+      <p class="section-lead">Runs in parallel with the backend job. Uses Bun for fast installs and lockfile enforcement.</p>
+
+      <div class="job-grid">
+        <div class="job-row">
+          <div class="job-icon" style="background:rgba(139,92,246,.1);color:var(--violet)">1</div>
+          <div class="job-info">
+            <div class="job-name">Bun install (frozen lockfile)</div>
+            <div class="job-desc"><code>bun install --frozen-lockfile</code> fails if <code>bun.lockb</code> is out of date — prevents accidental dependency drift. <code>node_modules</code> is cached on the lockfile hash.</div>
+          </div>
+        </div>
+        <div class="job-row">
+          <div class="job-icon" style="background:rgba(139,92,246,.1);color:var(--violet)">2</div>
+          <div class="job-info">
+            <div class="job-name">ESLint</div>
+            <div class="job-desc">Runs the project's ESLint config via <code>bun run lint</code>. Catches import issues, unused variables, React hooks violations, and Next.js-specific rules.</div>
+          </div>
+        </div>
+        <div class="job-row">
+          <div class="job-icon" style="background:rgba(139,92,246,.1);color:var(--violet)">3</div>
+          <div class="job-info">
+            <div class="job-name">TypeScript type-check</div>
+            <div class="job-desc"><code>bun run tsc --noEmit</code> — compiles the entire codebase without emitting files. Catches type errors across all <code>src/</code> without waiting for a full Bun build.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── CI: Compose validate ────────────────────────────────────── -->
+    <span class="section-anchor" id="ci-compose"></span>
+    <div class="section">
+      <h2><span class="h2-icon" style="background:rgba(6,182,212,.1);color:var(--cyan)">🐳</span>CI — Compose Validate <span class="tag tag-blue">ci.yml</span></h2>
+      <p class="section-lead">Validates all three compose files parse and resolve cleanly, in parallel with the other CI jobs.</p>
+      <div class="card">
+        <p class="card-desc">Runs <code>docker compose config --quiet</code> on all three stack files. This catches: YAML syntax errors, undefined environment variable references, missing service dependency names, and port binding conflicts. Fails fast — doesn't start any containers.</p>
+        <div class="cmd-block">
+          <div class="cmd-header">
+            <span class="cmd-file">.github/workflows/ci.yml — compose-validate job</span>
+            <button class="cmd-copy-btn" onclick="copyBlock(this)">copy</button>
+          </div>
+          <pre class="cmd-pre">docker compose -f docker-compose.yml config --quiet
+docker compose -f docker-compose.dev.yml config --quiet
+docker compose -f docker-compose.cqrs.yml config --quiet</pre>
+        </div>
+      </div>
+    </div>
+
+    <div class="divider"></div>
+
+    <!-- ── CD: Build Images ───────────────────────────────────────── -->
+    <span class="section-anchor" id="cd-build"></span>
+    <div class="section">
+      <h2><span class="h2-icon" style="background:rgba(139,92,246,.12);color:var(--violet)">🔨</span>CD — Build Images <span class="tag tag-amber">cd.yml</span></h2>
+      <p class="section-lead">Runs 7 build jobs in parallel after CI passes. Each image is tagged with the short commit SHA and <code>latest</code>.</p>
+
+      <div class="notice notice-blue">
+        <span class="notice-icon">ℹ</span>
+        <span>GitHub Actions build cache (<code>type=gha</code>) is scoped per service so each build only rebuilds layers that changed. A typical no-change cache hit completes in under 30 seconds per service.</span>
+      </div>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>Job</th><th>Dockerfile</th><th>Image name</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>build-monolith</td><td><code>docker/prod/Dockerfile</code></td><td><code>ghcr.io/&lt;owner&gt;/plots/app</code></td></tr>
+            <tr><td>build-worker</td><td><code>docker/prod/Dockerfile.worker</code></td><td><code>ghcr.io/&lt;owner&gt;/plots/worker</code></td></tr>
+            <tr><td>build-cqrs (api-gateway)</td><td><code>services/api-gateway/Dockerfile</code></td><td><code>ghcr.io/&lt;owner&gt;/plots/api-gateway</code></td></tr>
+            <tr><td>build-cqrs (chat-command)</td><td><code>services/chat-command/Dockerfile</code></td><td><code>ghcr.io/&lt;owner&gt;/plots/chat-command</code></td></tr>
+            <tr><td>build-cqrs (chat-query)</td><td><code>services/chat-query/Dockerfile</code></td><td><code>ghcr.io/&lt;owner&gt;/plots/chat-query</code></td></tr>
+            <tr><td>build-cqrs (plot-command)</td><td><code>services/plot-command/Dockerfile</code></td><td><code>ghcr.io/&lt;owner&gt;/plots/plot-command</code></td></tr>
+            <tr><td>build-cqrs (plot-query)</td><td><code>services/plot-query/Dockerfile</code></td><td><code>ghcr.io/&lt;owner&gt;/plots/plot-query</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ── CD: Deploy ─────────────────────────────────────────────── -->
+    <span class="section-anchor" id="cd-deploy"></span>
+    <div class="section">
+      <h2><span class="h2-icon" style="background:rgba(245,158,11,.12);color:var(--amber)">☸</span>CD — Deploy to Kubernetes <span class="tag tag-amber">cd.yml</span></h2>
+      <p class="section-lead">Runs after all 7 build jobs complete. Patches each deployment's image tag, runs Alembic migrations, waits for rollouts, then runs smoke tests.</p>
+
+      <div class="step-list">
+        <div class="step">
+          <div class="step-num">1</div>
+          <div class="step-body">
+            <div class="step-title">Configure kubectl</div>
+            <div class="step-desc">Decodes the <code>KUBECONFIG_B64</code> secret and writes it to <code>~/.kube/config</code>. All subsequent <code>kubectl</code> commands target the production cluster.</div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">2</div>
+          <div class="step-body">
+            <div class="step-title">Patch image tags on all 7 deployments</div>
+            <div class="step-desc">Runs <code>kubectl set image</code> for each deployment, setting the new short-SHA tag. Kubernetes immediately begins rolling out new pods (rolling update strategy — no downtime).</div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">3</div>
+          <div class="step-body">
+            <div class="step-title">Run Alembic migrations</div>
+            <div class="step-desc">Creates a one-off Job from a <code>migrate</code> CronJob template and waits for it to complete (120s timeout). Ensures schema migrations run before new pods serve traffic.</div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">4</div>
+          <div class="step-body">
+            <div class="step-title">Wait for all rollouts</div>
+            <div class="step-desc"><code>kubectl rollout status</code> on each deployment with a 180s timeout. If any deployment fails to roll out, the workflow fails and the failure annotation points to <code>kubectl rollout undo</code>.</div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">5</div>
+          <div class="step-body">
+            <div class="step-title">Smoke tests</div>
+            <div class="step-desc">Spawns a temporary <code>curlimages/curl</code> pod inside the cluster to hit <code>/health</code> on both the monolith app service and the API Gateway. Pod is cleaned up automatically after the check.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="divider"></div>
+
+    <!-- ── Manual: Dev ────────────────────────────────────────────── -->
+    <span class="section-anchor" id="manual-dev"></span>
+    <div class="section">
+      <h2><span class="h2-icon" style="background:rgba(16,185,129,.1);color:var(--green)">💻</span>Manual — Monolith Dev Stack</h2>
+      <p class="section-lead">Hot-reload for both FastAPI and Next.js. Source is volume-mounted — no rebuild needed after code changes.</p>
+
+      <div class="step-list">
+        <div class="step">
+          <div class="step-num">1</div>
+          <div class="step-body">
+            <div class="step-title">Build image and start all services</div>
+            <div class="cmd-block">
+              <div class="cmd-header"><span class="cmd-file">first run</span><button class="cmd-copy-btn" onclick="copyBlock(this)">copy</button></div>
+              <pre class="cmd-pre">make dev-build
+<span class="cm"># Windows:</span>  .\dev.ps1 dev-build</pre>
+            </div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">2</div>
+          <div class="step-body">
+            <div class="step-title">Apply database migrations</div>
+            <div class="cmd-block">
+              <div class="cmd-header"><span class="cmd-file">first run only</span><button class="cmd-copy-btn" onclick="copyBlock(this)">copy</button></div>
+              <pre class="cmd-pre">make migrate
+<span class="cm"># Windows:</span>  .\dev.ps1 migrate</pre>
+            </div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">3</div>
+          <div class="step-body">
+            <div class="step-title">Access the services</div>
+            <div class="cmd-block">
+              <div class="cmd-header"><span class="cmd-file">service URLs</span><button class="cmd-copy-btn" onclick="copyBlock(this)">copy</button></div>
+              <pre class="cmd-pre">http://localhost       <span class="cm"># App (Nginx → FastAPI + Next.js)</span>
+http://localhost/docs  <span class="cm"># FastAPI Swagger UI</span>
+http://localhost:5050  <span class="cm"># pgAdmin (admin@mvp.dev / admin)</span>
+http://localhost:8081  <span class="cm"># Redis Commander (admin / admin)</span></pre>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Manual: Prod ───────────────────────────────────────────── -->
+    <span class="section-anchor" id="manual-prod"></span>
+    <div class="section">
+      <h2><span class="h2-icon" style="background:rgba(239,68,68,.1);color:var(--red)">🏭</span>Manual — Monolith Production Stack</h2>
+      <p class="section-lead">Multi-stage build: Next.js compiled to standalone, Gunicorn + uvicorn workers for FastAPI. Build takes 3–5 min on first run.</p>
+
+      <div class="cmd-block">
+        <div class="cmd-header"><span class="cmd-file">production stack</span><button class="cmd-copy-btn" onclick="copyBlock(this)">copy</button></div>
+        <pre class="cmd-pre">make prod-build       <span class="cm"># builds multi-stage image and starts</span>
+<span class="cm"># Windows:</span>  .\dev.ps1 prod-build
+
+<span class="cm"># App served at http://localhost — Swagger UI is disabled in prod.</span>
+<span class="cm"># PostgreSQL and Redis are internal only (no host port bindings).</span></pre>
+      </div>
+
+      <div class="notice notice-amber">
+        <span class="notice-icon">⚠</span>
+        <span>Migrations are not run automatically in the production compose stack. Run them manually from inside the container: <code>docker compose exec app sh -c "cd /app/backend && .venv/bin/alembic upgrade head"</code></span>
+      </div>
+    </div>
+
+    <!-- ── Manual: CQRS ───────────────────────────────────────────── -->
+    <span class="section-anchor" id="manual-cqrs"></span>
+    <div class="section">
+      <h2><span class="h2-icon" style="background:rgba(139,92,246,.12);color:var(--violet)">⚙</span>Manual — CQRS Microservices Stack</h2>
+      <p class="section-lead">Starts all 5 microservices, Kafka, Zookeeper, kafka-init (topic bootstrap), Kafka UI, and PostgreSQL.</p>
+
+      <div class="cmd-block">
+        <div class="cmd-header"><span class="cmd-file">CQRS stack</span><button class="cmd-copy-btn" onclick="copyBlock(this)">copy</button></div>
+        <pre class="cmd-pre">make cqrs-build       <span class="cm"># builds all 5 service images and starts</span>
+<span class="cm"># Windows:</span>  .\dev.ps1 cqrs-build
+
+<span class="cm"># Services:</span>
+<span class="cm">#   http://localhost:8000   — API Gateway</span>
+<span class="cm">#   http://localhost:8090   — Kafka UI</span>
+<span class="cm">#   localhost:9092          — Kafka broker</span>
+<span class="cm">#   localhost:5432          — PostgreSQL (CQRS schemas)</span></pre>
+      </div>
+
+      <div class="notice notice-amber">
+        <span class="notice-icon">⚠</span>
+        <span>Both the monolith dev stack and the CQRS stack bind PostgreSQL on <code>:5432</code>. Run them one at a time, or change <code>POSTGRES_PORT</code> in your <code>.env</code> before starting the second stack.</span>
+      </div>
+
+      <h3>Startup order (automatic)</h3>
+      <div class="job-grid">
+        <div class="job-row">
+          <div class="job-icon" style="background:rgba(59,130,246,.1);color:var(--blue)">1</div>
+          <div class="job-info">
+            <div class="job-name">PostgreSQL + Zookeeper</div>
+            <div class="job-desc">Start in parallel. PostgreSQL runs <code>scripts/init-schemas.sql</code> on first start to create the four CQRS schemas.</div>
+          </div>
+        </div>
+        <div class="job-row">
+          <div class="job-icon" style="background:rgba(59,130,246,.1);color:var(--blue)">2</div>
+          <div class="job-info">
+            <div class="job-name">Kafka broker</div>
+            <div class="job-desc">Starts after Zookeeper is healthy. Exposes <code>:9092</code> on the host.</div>
+          </div>
+        </div>
+        <div class="job-row">
+          <div class="job-icon" style="background:rgba(59,130,246,.1);color:var(--blue)">3</div>
+          <div class="job-info">
+            <div class="job-name">kafka-init (one-off job)</div>
+            <div class="job-desc">Waits for Kafka healthy, creates 4 topics (<code>chat.events</code>, <code>chat.bulk.commands</code>, <code>plot.events</code>, <code>plot.bulk.commands</code>), then exits with code 0.</div>
+          </div>
+        </div>
+        <div class="job-row">
+          <div class="job-icon" style="background:rgba(59,130,246,.1);color:var(--blue)">4</div>
+          <div class="job-info">
+            <div class="job-name">5 microservices</div>
+            <div class="job-desc">Each runs <code>Base.metadata.create_all</code> on startup — no separate migration step. <code>chat-query</code> and <code>plot-query</code> start Kafka consumer background tasks.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="divider"></div>
+
+    <!-- ── K8s: Cluster Setup ─────────────────────────────────────── -->
+    <span class="section-anchor" id="k8s-setup"></span>
+    <div class="section">
+      <h2><span class="h2-icon" style="background:rgba(6,182,212,.12);color:var(--cyan)">☸</span>Kubernetes — Cluster Setup</h2>
+      <p class="section-lead">All K8s manifests live in <code>k8s/</code>. Deploy to any CNCF-conformant cluster.</p>
+
+      <div class="step-list">
+        <div class="step">
+          <div class="step-num">1</div>
+          <div class="step-body">
+            <div class="step-title">Create namespace and apply config</div>
+            <div class="cmd-block">
+              <div class="cmd-header"><span class="cmd-file">bash</span><button class="cmd-copy-btn" onclick="copyBlock(this)">copy</button></div>
+              <pre class="cmd-pre">kubectl apply -f k8s/namespace.yaml
+kubectl apply -f k8s/configmap.yaml</pre>
+            </div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">2</div>
+          <div class="step-body">
+            <div class="step-title">Create secrets</div>
+            <div class="step-desc">Fill in base64-encoded values before applying. Generate with <code>echo -n 'value' | base64</code>.</div>
+            <div class="cmd-block">
+              <div class="cmd-header"><span class="cmd-file">bash</span><button class="cmd-copy-btn" onclick="copyBlock(this)">copy</button></div>
+              <pre class="cmd-pre">kubectl apply -f k8s/secrets.yaml -n plots-system</pre>
+            </div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">3</div>
+          <div class="step-body">
+            <div class="step-title">Deploy infrastructure (order matters)</div>
+            <div class="cmd-block">
+              <div class="cmd-header"><span class="cmd-file">bash</span><button class="cmd-copy-btn" onclick="copyBlock(this)">copy</button></div>
+              <pre class="cmd-pre">kubectl apply -f k8s/infra/zookeeper.yaml
+kubectl rollout status statefulset/zookeeper -n plots-system
+
+kubectl apply -f k8s/infra/kafka.yaml
+kubectl rollout status statefulset/kafka -n plots-system
+
+kubectl apply -f k8s/infra/postgres.yaml
+kubectl rollout status statefulset/postgres -n plots-system</pre>
+            </div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">4</div>
+          <div class="step-body">
+            <div class="step-title">Create Kafka topics</div>
+            <div class="cmd-block">
+              <div class="cmd-header"><span class="cmd-file">bash</span><button class="cmd-copy-btn" onclick="copyBlock(this)">copy</button></div>
+              <pre class="cmd-pre">kubectl exec -n plots-system kafka-0 -- bash &lt; kafka/create-topics.sh</pre>
+            </div>
+          </div>
+        </div>
+        <div class="step">
+          <div class="step-num">5</div>
+          <div class="step-body">
+            <div class="step-title">Deploy microservices and autoscalers</div>
+            <div class="cmd-block">
+              <div class="cmd-header"><span class="cmd-file">bash</span><button class="cmd-copy-btn" onclick="copyBlock(this)">copy</button></div>
+              <pre class="cmd-pre">kubectl apply -f k8s/services/
+kubectl rollout status deployment -n plots-system
+kubectl apply -f k8s/hpa/
+kubectl apply -f k8s/ingress.yaml</pre>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── K8s: Build & Push ──────────────────────────────────────── -->
+    <span class="section-anchor" id="k8s-images"></span>
+    <div class="section">
+      <h2><span class="h2-icon" style="background:rgba(59,130,246,.12);color:var(--blue)">⬆</span>Build &amp; Push Images Manually</h2>
+      <p class="section-lead">For one-off builds outside of GitHub Actions.</p>
+
+      <div class="cmd-block">
+        <div class="cmd-header"><span class="cmd-file">bash</span><button class="cmd-copy-btn" onclick="copyBlock(this)">copy</button></div>
+        <pre class="cmd-pre">REGISTRY=ghcr.io/&lt;your-username&gt;/plots
+SHA=$(git rev-parse --short HEAD)
+
+<span class="cm"># Monolith</span>
+docker build -t $REGISTRY/app:$SHA -f docker/prod/Dockerfile .
+docker push $REGISTRY/app:$SHA
+
+<span class="cm"># Worker</span>
+docker build -t $REGISTRY/worker:$SHA -f docker/prod/Dockerfile.worker .
+docker push $REGISTRY/worker:$SHA
+
+<span class="cm"># CQRS microservices</span>
+for svc in api-gateway chat-command chat-query plot-command plot-query; do
+  docker build -t $REGISTRY/$svc:$SHA services/$svc/
+  docker push $REGISTRY/$svc:$SHA
+done</pre>
+      </div>
+    </div>
+
+    <!-- ── K8s: Rollback ──────────────────────────────────────────── -->
+    <span class="section-anchor" id="k8s-rollback"></span>
+    <div class="section">
+      <h2><span class="h2-icon" style="background:rgba(239,68,68,.12);color:var(--red)">⏪</span>Rollback</h2>
+      <p class="section-lead">Kubernetes keeps a rolling history of 3 revisions per deployment by default.</p>
+
+      <div class="cmd-block">
+        <div class="cmd-header"><span class="cmd-file">rollback all services to previous revision</span><button class="cmd-copy-btn" onclick="copyBlock(this)">copy</button></div>
+        <pre class="cmd-pre"><span class="cm"># Roll back a single deployment</span>
+kubectl rollout undo deployment/api-gateway -n plots-system
+
+<span class="cm"># Roll back all CQRS services at once</span>
+for d in app worker api-gateway chat-command chat-query plot-command plot-query; do
+  kubectl rollout undo deployment/$d -n plots-system
+done
+
+<span class="cm"># Roll back to a specific revision</span>
+kubectl rollout undo deployment/app --to-revision=2 -n plots-system
+
+<span class="cm"># Check rollout history</span>
+kubectl rollout history deployment/app -n plots-system</pre>
+      </div>
+
+      <div class="notice notice-red">
+        <span class="notice-icon">⚠</span>
+        <span>Rollback reverts the running pods but does <strong>not</strong> reverse database migrations. If the new code ran a schema migration before the rollback, the old code may be incompatible with the migrated schema. Always write backward-compatible migrations and use a separate migration rollback step if needed.</span>
+      </div>
+    </div>
+
+    <div class="divider"></div>
+
+    <!-- ── Image Registry ─────────────────────────────────────────── -->
+    <span class="section-anchor" id="image-registry"></span>
+    <div class="section">
+      <h2><span class="h2-icon" style="background:rgba(6,182,212,.12);color:var(--cyan)">📦</span>Image Registry — GHCR</h2>
+      <p class="section-lead">All images are published to GitHub Container Registry (<code>ghcr.io</code>). Access is controlled by the repo's package visibility settings.</p>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>Image</th><th>Tags</th><th>Updated on</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><code>ghcr.io/&lt;owner&gt;/plots/app</code></td><td><code>&lt;short-sha&gt;</code> · <code>latest</code></td><td>Every push to main</td></tr>
+            <tr><td><code>ghcr.io/&lt;owner&gt;/plots/worker</code></td><td><code>&lt;short-sha&gt;</code> · <code>latest</code></td><td>Every push to main</td></tr>
+            <tr><td><code>ghcr.io/&lt;owner&gt;/plots/api-gateway</code></td><td><code>&lt;short-sha&gt;</code> · <code>latest</code></td><td>Every push to main</td></tr>
+            <tr><td><code>ghcr.io/&lt;owner&gt;/plots/chat-command</code></td><td><code>&lt;short-sha&gt;</code> · <code>latest</code></td><td>Every push to main</td></tr>
+            <tr><td><code>ghcr.io/&lt;owner&gt;/plots/chat-query</code></td><td><code>&lt;short-sha&gt;</code> · <code>latest</code></td><td>Every push to main</td></tr>
+            <tr><td><code>ghcr.io/&lt;owner&gt;/plots/plot-command</code></td><td><code>&lt;short-sha&gt;</code> · <code>latest</code></td><td>Every push to main</td></tr>
+            <tr><td><code>ghcr.io/&lt;owner&gt;/plots/plot-query</code></td><td><code>&lt;short-sha&gt;</code> · <code>latest</code></td><td>Every push to main</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ── Env Promotion ──────────────────────────────────────────── -->
+    <span class="section-anchor" id="env-promotion"></span>
+    <div class="section">
+      <h2><span class="h2-icon" style="background:rgba(16,185,129,.1);color:var(--green)">🔁</span>Environment Promotion</h2>
+      <p class="section-lead">How code moves from local → PR → production.</p>
+
+      <div class="job-grid">
+        <div class="job-row">
+          <div class="job-icon" style="background:rgba(16,185,129,.1);color:var(--green)">🖥</div>
+          <div class="job-info">
+            <div class="job-name">Local development</div>
+            <div class="job-desc">Use <code>make dev-build</code> (monolith) or <code>make cqrs-build</code> (CQRS). Changes are hot-reloaded via volume mounts — no Docker rebuild required.</div>
+          </div>
+        </div>
+        <div class="job-row">
+          <div class="job-icon" style="background:rgba(59,130,246,.1);color:var(--blue)">📥</div>
+          <div class="job-info">
+            <div class="job-name">Pull request</div>
+            <div class="job-desc">Opening a PR triggers the CI workflow. All three jobs (backend, frontend, compose-validate) must pass before merge is allowed. The branch is never deployed.</div>
+          </div>
+        </div>
+        <div class="job-row">
+          <div class="job-icon" style="background:rgba(245,158,11,.1);color:var(--amber)">🔀</div>
+          <div class="job-info">
+            <div class="job-name">Merge to main</div>
+            <div class="job-desc">Triggers both CI and CD. CI re-runs on the merged commit. If CI passes, CD builds all images, pushes to GHCR, and deploys to the Kubernetes <code>production</code> environment. Requires a GitHub environment approval gate if configured.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<script>
+  function copyBlock(btn) {
+    const pre = btn.closest('.cmd-block').querySelector('pre');
+    const text = (pre.innerText || pre.textContent).trim();
+    navigator.clipboard.writeText(text).then(() => {
+      const orig = btn.textContent;
+      btn.textContent = 'copied ✓';
+      btn.classList.add('copied');
+      setTimeout(() => { btn.textContent = orig; btn.classList.remove('copied'); }, 1800);
+    });
+  }
+
+  // Active nav link via IntersectionObserver
+  const anchors = document.querySelectorAll('.section-anchor');
+  const links = document.querySelectorAll('.nav-link');
+
+  const obs = new IntersectionObserver(entries => {
+    entries.forEach(e => {
+      if (e.isIntersecting) {
+        const id = e.target.id;
+        links.forEach(l => {
+          l.classList.toggle('active', l.getAttribute('href') === '#' + id);
+        });
+      }
+    });
+  }, { rootMargin: '-60px 0px -70% 0px', threshold: 0 });
+
+  anchors.forEach(a => obs.observe(a));
+</script>

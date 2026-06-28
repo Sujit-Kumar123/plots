@@ -1,0 +1,237 @@
+name: CD
+
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: cd-${{ github.sha }}
+  cancel-in-progress: false
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_PREFIX: ${{ github.repository_owner }}/plots
+
+# ── Build matrix ─────────────────────────────────────────────────────────────
+# Monolith:       ghcr.io/<owner>/plots/app:<sha>
+# Worker:         ghcr.io/<owner>/plots/worker:<sha>
+# CQRS services:  ghcr.io/<owner>/plots/<service>:<sha>
+# ─────────────────────────────────────────────────────────────────────────────
+
+jobs:
+  # ── Build monolith app image ────────────────────────────────────────────────
+  build-monolith:
+    name: Build — monolith app
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/app
+          tags: |
+            type=sha,prefix=,format=short
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/prod/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=monolith
+          cache-to: type=gha,scope=monolith,mode=max
+
+  # ── Build Celery worker image ───────────────────────────────────────────────
+  build-worker:
+    name: Build — celery worker
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/worker
+          tags: |
+            type=sha,prefix=,format=short
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/prod/Dockerfile.worker
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=worker
+          cache-to: type=gha,scope=worker,mode=max
+
+  # ── Build all 5 CQRS microservice images (matrix) ──────────────────────────
+  build-cqrs-services:
+    name: Build — ${{ matrix.service }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    strategy:
+      fail-fast: false
+      matrix:
+        service:
+          - api-gateway
+          - chat-command
+          - chat-query
+          - plot-command
+          - plot-query
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/${{ matrix.service }}
+          tags: |
+            type=sha,prefix=,format=short
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push ${{ matrix.service }}
+        uses: docker/build-push-action@v6
+        with:
+          context: services/${{ matrix.service }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=${{ matrix.service }}
+          cache-to: type=gha,scope=${{ matrix.service }},mode=max
+
+  # ── Deploy to Kubernetes ────────────────────────────────────────────────────
+  deploy:
+    name: Deploy — Kubernetes
+    runs-on: ubuntu-latest
+    needs: [build-monolith, build-worker, build-cqrs-services]
+    environment: production
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v4
+        with:
+          version: v1.29.0
+
+      - name: Configure kubeconfig
+        run: |
+          mkdir -p ~/.kube
+          echo "${{ secrets.KUBECONFIG_B64 }}" | base64 -d > ~/.kube/config
+
+      - name: Derive short SHA
+        id: sha
+        run: echo "short=${GITHUB_SHA::7}" >> $GITHUB_OUTPUT
+
+      - name: Patch monolith deployment
+        env:
+          SHORT_SHA: ${{ steps.sha.outputs.short }}
+        run: |
+          kubectl set image deployment/app \
+            app=${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/app:$SHORT_SHA \
+            -n plots-system
+
+      - name: Patch worker deployment
+        env:
+          SHORT_SHA: ${{ steps.sha.outputs.short }}
+        run: |
+          kubectl set image deployment/worker \
+            worker=${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/worker:$SHORT_SHA \
+            -n plots-system
+
+      - name: Patch CQRS service deployments
+        env:
+          SHORT_SHA: ${{ steps.sha.outputs.short }}
+        run: |
+          for svc in api-gateway chat-command chat-query plot-command plot-query; do
+            kubectl set image deployment/$svc \
+              $svc=${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/$svc:$SHORT_SHA \
+              -n plots-system
+          done
+
+      - name: Run Alembic migrations
+        run: |
+          kubectl create job --from=cronjob/migrate migrate-${{ steps.sha.outputs.short }} \
+            -n plots-system --dry-run=client -o yaml \
+            | kubectl apply -f -
+          kubectl wait --for=condition=complete \
+            job/migrate-${{ steps.sha.outputs.short }} \
+            -n plots-system --timeout=120s
+
+      - name: Wait for rollouts
+        run: |
+          for d in app worker api-gateway chat-command chat-query plot-command plot-query; do
+            echo "Waiting for $d..."
+            kubectl rollout status deployment/$d -n plots-system --timeout=180s
+          done
+
+      - name: Smoke test — app health
+        run: |
+          kubectl run smoke --image=curlimages/curl:8.6.0 \
+            --restart=Never --rm -i \
+            -n plots-system \
+            -- curl -sf http://app/health
+
+      - name: Smoke test — API Gateway health
+        run: |
+          kubectl run smoke-gw --image=curlimages/curl:8.6.0 \
+            --restart=Never --rm -i \
+            -n plots-system \
+            -- curl -sf http://api-gateway:8000/health
+
+      - name: Notify on failure
+        if: failure()
+        run: |
+          echo "::error::Deployment failed at commit ${{ github.sha }}. Rolling back is manual — run: kubectl rollout undo deployment/<name> -n plots-system"

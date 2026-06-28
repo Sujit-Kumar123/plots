@@ -1,0 +1,1221 @@
+<title>Prerequisites — Plots</title>
+<meta name="description" content="Step-by-step pre-requirements checklist for setting up and running the Plots full-stack monorepo locally or on Kubernetes.">
+
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:        #07111E;
+    --surface:   #0E1A2E;
+    --surface2:  #152238;
+    --border:    #1B3050;
+    --border2:   #243D5C;
+    --text:      #E2EAF4;
+    --muted:     #6B84A0;
+    --faint:     #3A5272;
+
+    --blue:      #3B82F6;
+    --blue-dim:  #1D4ED8;
+    --blue-glow: rgba(59,130,246,.15);
+    --green:     #10B981;
+    --green-dim: #065F46;
+    --green-glow:rgba(16,185,129,.13);
+    --amber:     #F59E0B;
+    --amber-dim: #78350F;
+    --amber-glow:rgba(245,158,11,.12);
+    --red:       #EF4444;
+    --red-dim:   #7F1D1D;
+    --red-glow:  rgba(239,68,68,.12);
+    --violet:    #8B5CF6;
+
+    --mono: 'Cascadia Code', 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+    --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+
+    --radius: 10px;
+    --radius-sm: 6px;
+  }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: 15px;
+    line-height: 1.65;
+    min-height: 100vh;
+  }
+
+  /* ── Progress Bar ─────────────────────────────────────────────── */
+
+  #progress-bar-wrap {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    z-index: 100;
+    background: rgba(7,17,30,.85);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--border);
+    padding: 10px 24px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+
+  #progress-label {
+    font-size: 12px;
+    font-family: var(--mono);
+    color: var(--muted);
+    white-space: nowrap;
+  }
+  #progress-label span { color: var(--green); font-weight: 600; }
+
+  #progress-track {
+    flex: 1;
+    height: 4px;
+    background: var(--border);
+    border-radius: 999px;
+    overflow: hidden;
+  }
+  #progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--blue), var(--green));
+    border-radius: 999px;
+    transition: width .4s cubic-bezier(.4,0,.2,1);
+    width: 0%;
+  }
+  #progress-pct {
+    font-size: 12px;
+    font-family: var(--mono);
+    color: var(--green);
+    font-weight: 600;
+    min-width: 36px;
+    text-align: right;
+  }
+
+  /* ── Hero ─────────────────────────────────────────────────────── */
+
+  .hero {
+    padding: 100px 24px 52px;
+    max-width: 860px;
+    margin: 0 auto;
+    text-align: center;
+  }
+
+  .hero-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    background: var(--blue-glow);
+    border: 1px solid rgba(59,130,246,.3);
+    border-radius: 999px;
+    padding: 5px 14px;
+    font-size: 11.5px;
+    font-family: var(--mono);
+    color: var(--blue);
+    letter-spacing: .04em;
+    margin-bottom: 24px;
+  }
+
+  .hero h1 {
+    font-size: clamp(28px, 5vw, 44px);
+    font-weight: 700;
+    letter-spacing: -.03em;
+    line-height: 1.15;
+    color: #fff;
+    text-wrap: balance;
+    margin-bottom: 16px;
+  }
+
+  .hero h1 em {
+    font-style: normal;
+    background: linear-gradient(135deg, var(--blue) 0%, var(--violet) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .hero p {
+    color: var(--muted);
+    max-width: 540px;
+    margin: 0 auto 36px;
+    font-size: 15.5px;
+  }
+
+  .hero-stats {
+    display: flex;
+    justify-content: center;
+    gap: 32px;
+    flex-wrap: wrap;
+  }
+
+  .stat {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+  }
+  .stat-val {
+    font-size: 24px;
+    font-weight: 700;
+    font-family: var(--mono);
+    color: #fff;
+  }
+  .stat-lbl {
+    font-size: 11.5px;
+    color: var(--muted);
+    letter-spacing: .05em;
+    text-transform: uppercase;
+  }
+
+  /* ── Layout ───────────────────────────────────────────────────── */
+
+  .container {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 0 24px 80px;
+  }
+
+  /* ── Section ──────────────────────────────────────────────────── */
+
+  .section {
+    margin-bottom: 48px;
+  }
+
+  .section-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+
+  .section-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: var(--radius-sm);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 17px;
+    flex-shrink: 0;
+  }
+
+  .icon-red    { background: var(--red-glow);   border: 1px solid rgba(239,68,68,.25); }
+  .icon-blue   { background: var(--blue-glow);  border: 1px solid rgba(59,130,246,.25); }
+  .icon-amber  { background: var(--amber-glow); border: 1px solid rgba(245,158,11,.25); }
+  .icon-green  { background: var(--green-glow); border: 1px solid rgba(16,185,129,.25); }
+
+  .section-title {
+    font-size: 17px;
+    font-weight: 700;
+    color: #fff;
+  }
+  .section-subtitle {
+    font-size: 13px;
+    color: var(--muted);
+  }
+  .section-tag {
+    margin-left: auto;
+    font-size: 11px;
+    font-family: var(--mono);
+    padding: 3px 10px;
+    border-radius: 999px;
+  }
+  .tag-required { background: var(--red-glow);   color: var(--red);   border: 1px solid rgba(239,68,68,.3); }
+  .tag-optional { background: var(--amber-glow); color: var(--amber); border: 1px solid rgba(245,158,11,.3); }
+  .tag-config   { background: var(--blue-glow);  color: var(--blue);  border: 1px solid rgba(59,130,246,.3); }
+
+  /* ── Requirement Card ─────────────────────────────────────────── */
+
+  .req-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px 22px;
+    margin-bottom: 12px;
+    transition: border-color .2s, background .2s;
+    cursor: default;
+  }
+
+  .req-card:hover {
+    border-color: var(--border2);
+    background: var(--surface2);
+  }
+
+  .req-card.checked {
+    border-color: rgba(16,185,129,.35);
+    background: rgba(16,185,129,.04);
+  }
+
+  .req-top {
+    display: flex;
+    align-items: flex-start;
+    gap: 14px;
+  }
+
+  .req-check {
+    width: 22px;
+    height: 22px;
+    border-radius: 6px;
+    border: 2px solid var(--faint);
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: border-color .2s, background .2s;
+    margin-top: 1px;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  .req-card.checked .req-check {
+    background: var(--green);
+    border-color: var(--green);
+  }
+
+  .check-icon {
+    opacity: 0;
+    transition: opacity .15s;
+    color: #fff;
+  }
+  .req-card.checked .check-icon { opacity: 1; }
+
+  .req-body { flex: 1; min-width: 0; }
+
+  .req-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-bottom: 6px;
+  }
+
+  .req-name {
+    font-size: 15px;
+    font-weight: 600;
+    color: #fff;
+  }
+
+  .req-card.checked .req-name {
+    color: var(--muted);
+    text-decoration: line-through;
+    text-decoration-color: var(--faint);
+  }
+
+  .req-version {
+    font-family: var(--mono);
+    font-size: 12px;
+    padding: 2px 8px;
+    border-radius: 4px;
+    background: var(--surface2);
+    border: 1px solid var(--border2);
+    color: var(--muted);
+  }
+
+  .req-badge {
+    font-family: var(--mono);
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 999px;
+  }
+
+  .badge-red    { background: var(--red-glow);   color: var(--red);   border: 1px solid rgba(239,68,68,.3); }
+  .badge-amber  { background: var(--amber-glow); color: var(--amber); border: 1px solid rgba(245,158,11,.3); }
+  .badge-blue   { background: var(--blue-glow);  color: var(--blue);  border: 1px solid rgba(59,130,246,.3); }
+
+  .req-desc {
+    font-size: 13.5px;
+    color: var(--muted);
+    margin-bottom: 12px;
+    line-height: 1.55;
+  }
+
+  .req-commands {
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+  }
+
+  .cmd-row {
+    display: flex;
+    align-items: stretch;
+    gap: 0;
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+    border: 1px solid var(--border);
+  }
+
+  .cmd-label {
+    font-size: 11px;
+    font-family: var(--mono);
+    padding: 7px 12px;
+    background: var(--surface2);
+    color: var(--muted);
+    white-space: nowrap;
+    display: flex;
+    align-items: center;
+    border-right: 1px solid var(--border);
+    letter-spacing: .04em;
+  }
+  .cmd-label.lbl-check  { color: var(--green); }
+  .cmd-label.lbl-install { color: var(--blue); }
+
+  .cmd-code {
+    flex: 1;
+    font-family: var(--mono);
+    font-size: 12.5px;
+    padding: 7px 12px;
+    color: var(--text);
+    background: transparent;
+    white-space: nowrap;
+    overflow-x: auto;
+    display: flex;
+    align-items: center;
+  }
+
+  .cmd-copy {
+    background: transparent;
+    border: none;
+    border-left: 1px solid var(--border);
+    padding: 0 12px;
+    cursor: pointer;
+    color: var(--faint);
+    transition: color .15s, background .15s;
+    display: flex;
+    align-items: center;
+    font-size: 13px;
+  }
+  .cmd-copy:hover { color: var(--blue); background: var(--blue-glow); }
+  .cmd-copy.copied { color: var(--green); }
+
+  .req-note {
+    margin-top: 10px;
+    font-size: 12.5px;
+    color: var(--amber);
+    background: var(--amber-glow);
+    border: 1px solid rgba(245,158,11,.2);
+    border-radius: var(--radius-sm);
+    padding: 8px 12px;
+    line-height: 1.5;
+  }
+
+  /* ── Env Vars Block ───────────────────────────────────────────── */
+
+  .env-block {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+  }
+
+  .env-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface2);
+  }
+
+  .env-header-title {
+    font-size: 12.5px;
+    font-family: var(--mono);
+    color: var(--muted);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .env-file { color: var(--blue); }
+
+  .env-copy-all {
+    font-size: 12px;
+    font-family: var(--mono);
+    background: var(--blue-glow);
+    border: 1px solid rgba(59,130,246,.3);
+    color: var(--blue);
+    padding: 5px 14px;
+    border-radius: 999px;
+    cursor: pointer;
+    transition: background .15s;
+  }
+  .env-copy-all:hover { background: rgba(59,130,246,.22); }
+
+  .env-pre {
+    padding: 18px 20px;
+    font-family: var(--mono);
+    font-size: 12.5px;
+    line-height: 2;
+    overflow-x: auto;
+    color: var(--text);
+  }
+
+  .env-comment { color: var(--faint); }
+  .env-key     { color: var(--blue); }
+  .env-eq      { color: var(--muted); }
+  .env-val     { color: var(--green); }
+  .env-placeholder { color: var(--amber); }
+
+  /* ── Steps ────────────────────────────────────────────────────── */
+
+  .steps {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .step {
+    display: flex;
+    gap: 16px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 18px 20px;
+  }
+
+  .step-num {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: var(--blue-glow);
+    border: 1px solid rgba(59,130,246,.35);
+    color: var(--blue);
+    font-size: 13px;
+    font-weight: 700;
+    font-family: var(--mono);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    margin-top: 1px;
+  }
+
+  .step-content { flex: 1; }
+
+  .step-title {
+    font-size: 14.5px;
+    font-weight: 600;
+    color: #fff;
+    margin-bottom: 6px;
+  }
+
+  .step-desc {
+    font-size: 13.5px;
+    color: var(--muted);
+    margin-bottom: 10px;
+  }
+
+  /* ── Divider ─────────────────────────────────────────────────── */
+  .divider {
+    height: 1px;
+    background: var(--border);
+    margin: 48px 0;
+  }
+
+  /* ── Scrollbar ───────────────────────────────────────────────── */
+  ::-webkit-scrollbar { height: 5px; width: 5px; }
+  ::-webkit-scrollbar-track { background: var(--surface); }
+  ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 999px; }
+
+  @media (max-width: 600px) {
+    .cmd-label { display: none; }
+    .hero-stats { gap: 24px; }
+  }
+</style>
+
+<!-- Progress Bar -->
+<div id="progress-bar-wrap">
+  <span id="progress-label">Checklist: <span id="done-count">0</span> / <span id="total-count">0</span> done</span>
+  <div id="progress-track"><div id="progress-fill"></div></div>
+  <span id="progress-pct">0%</span>
+</div>
+
+<!-- Hero -->
+<div class="hero">
+  <div class="hero-badge">
+    <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><circle cx="6" cy="6" r="5" stroke="currentColor" stroke-width="1.5"/><path d="M6 3.5V6L7.5 7.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+    Pre-Requirements
+  </div>
+  <h1>Set up your environment<br>before running <em>Plots</em></h1>
+  <p>A step-by-step checklist covering every tool, service, and credential you need — from a first clone to a running stack.</p>
+  <div class="hero-stats">
+    <div class="stat"><span class="stat-val">2</span><span class="stat-lbl">Required tools</span></div>
+    <div class="stat"><span class="stat-val">3</span><span class="stat-lbl">K8s tools</span></div>
+    <div class="stat"><span class="stat-val">6</span><span class="stat-lbl">External services</span></div>
+    <div class="stat"><span class="stat-val">3</span><span class="stat-lbl">Docker stacks</span></div>
+  </div>
+</div>
+
+<div class="container">
+
+  <!-- ── Section 1: Required ───────────────────────────────────── -->
+  <div class="section">
+    <div class="section-header">
+      <div class="section-icon icon-red">🔧</div>
+      <div>
+        <div class="section-title">Required — All Stacks</div>
+        <div class="section-subtitle">You need these to run any part of the project</div>
+      </div>
+      <span class="section-tag tag-required">required</span>
+    </div>
+
+    <!-- Docker Desktop -->
+    <div class="req-card" data-id="docker">
+      <div class="req-top">
+        <div class="req-check" onclick="toggleCheck(this)">
+          <svg class="check-icon" width="13" height="13" viewBox="0 0 13 13" fill="none">
+            <path d="M2.5 6.5L5 9L10.5 3.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <div class="req-body">
+          <div class="req-head">
+            <span class="req-name">Docker Desktop</span>
+            <span class="req-version">≥ 26.0</span>
+            <span class="req-badge badge-red">required</span>
+          </div>
+          <p class="req-desc">
+            Provides both the Docker engine and Docker Compose v2 (bundled). All three project stacks run entirely in containers — no local Python or Node.js install needed.
+          </p>
+          <div class="req-commands">
+            <div class="cmd-row">
+              <span class="cmd-label lbl-check">verify</span>
+              <span class="cmd-code">docker --version</span>
+              <button class="cmd-copy" onclick="copyCmd(this, 'docker --version')" title="Copy">⧉</button>
+            </div>
+            <div class="cmd-row">
+              <span class="cmd-label lbl-check">verify</span>
+              <span class="cmd-code">docker compose version</span>
+              <button class="cmd-copy" onclick="copyCmd(this, 'docker compose version')" title="Copy">⧉</button>
+            </div>
+            <div class="cmd-row">
+              <span class="cmd-label lbl-install">install</span>
+              <span class="cmd-code">https://www.docker.com/products/docker-desktop/</span>
+              <button class="cmd-copy" onclick="copyCmd(this, 'https://www.docker.com/products/docker-desktop/')" title="Copy">⧉</button>
+            </div>
+          </div>
+          <div class="req-note">
+            ⚠ Enable <strong>WSL 2 backend</strong> in Docker Desktop settings on Windows for best performance and hot-reload support.
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Git -->
+    <div class="req-card" data-id="git">
+      <div class="req-top">
+        <div class="req-check" onclick="toggleCheck(this)">
+          <svg class="check-icon" width="13" height="13" viewBox="0 0 13 13" fill="none">
+            <path d="M2.5 6.5L5 9L10.5 3.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <div class="req-body">
+          <div class="req-head">
+            <span class="req-name">Git</span>
+            <span class="req-version">≥ 2.40</span>
+            <span class="req-badge badge-red">required</span>
+          </div>
+          <p class="req-desc">Standard version control. Used to clone the repository.</p>
+          <div class="req-commands">
+            <div class="cmd-row">
+              <span class="cmd-label lbl-check">verify</span>
+              <span class="cmd-code">git --version</span>
+              <button class="cmd-copy" onclick="copyCmd(this, 'git --version')" title="Copy">⧉</button>
+            </div>
+            <div class="cmd-row">
+              <span class="cmd-label lbl-install">install</span>
+              <span class="cmd-code">https://git-scm.com/downloads</span>
+              <button class="cmd-copy" onclick="copyCmd(this, 'https://git-scm.com/downloads')" title="Copy">⧉</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Make / PowerShell -->
+    <div class="req-card" data-id="make">
+      <div class="req-top">
+        <div class="req-check" onclick="toggleCheck(this)">
+          <svg class="check-icon" width="13" height="13" viewBox="0 0 13 13" fill="none">
+            <path d="M2.5 6.5L5 9L10.5 3.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <div class="req-body">
+          <div class="req-head">
+            <span class="req-name">Make <em style="color:var(--muted);font-weight:400;font-style:normal">or</em> PowerShell</span>
+            <span class="req-badge badge-blue">pick one</span>
+          </div>
+          <p class="req-desc">
+            <code style="font-family:var(--mono);font-size:12px;color:var(--text)">Makefile</code> is used on Linux and macOS.
+            <code style="font-family:var(--mono);font-size:12px;color:var(--text)">dev.ps1</code> is the Windows equivalent — PowerShell 5.1+ ships with Windows 10/11, so no extra install needed on Windows.
+          </p>
+          <div class="req-commands">
+            <div class="cmd-row">
+              <span class="cmd-label lbl-check">Linux/macOS</span>
+              <span class="cmd-code">make --version</span>
+              <button class="cmd-copy" onclick="copyCmd(this, 'make --version')" title="Copy">⧉</button>
+            </div>
+            <div class="cmd-row">
+              <span class="cmd-label lbl-check">Windows</span>
+              <span class="cmd-code">$PSVersionTable.PSVersion</span>
+              <button class="cmd-copy" onclick="copyCmd(this, '$PSVersionTable.PSVersion')" title="Copy">⧉</button>
+            </div>
+          </div>
+          <div class="req-note">
+            On macOS: <code style="font-family:var(--mono);font-size:12px">brew install make</code>&nbsp;&nbsp;·&nbsp;&nbsp;On Ubuntu: <code style="font-family:var(--mono);font-size:12px">sudo apt install make</code>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div><!-- /section -->
+
+  <div class="divider"></div>
+
+  <!-- ── Section 2: Quick Start Steps ─────────────────────────── -->
+  <div class="section">
+    <div class="section-header">
+      <div class="section-icon icon-blue">⚡</div>
+      <div>
+        <div class="section-title">Quick Start — After Installing Requirements</div>
+        <div class="section-subtitle">Clone → configure → run. All services start in Docker.</div>
+      </div>
+    </div>
+
+    <div class="steps">
+      <div class="step">
+        <div class="step-num">1</div>
+        <div class="step-content">
+          <div class="step-title">Clone the repository</div>
+          <div class="cmd-row" style="border-radius:6px;overflow:hidden;border:1px solid var(--border);margin-top:4px">
+            <span class="cmd-code" style="padding:8px 14px">git clone &lt;repository-url&gt; &amp;&amp; cd plots</span>
+            <button class="cmd-copy" onclick="copyCmd(this, 'git clone <repository-url> && cd plots')" title="Copy">⧉</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-num">2</div>
+        <div class="step-content">
+          <div class="step-title">Create the environment file</div>
+          <div class="step-desc">Copy the template and fill in required values (see the Environment Variables section below).</div>
+          <div class="cmd-row" style="border-radius:6px;overflow:hidden;border:1px solid var(--border)">
+            <span class="cmd-label lbl-check">Linux/macOS</span>
+            <span class="cmd-code">cp .env.example .env</span>
+            <button class="cmd-copy" onclick="copyCmd(this, 'cp .env.example .env')" title="Copy">⧉</button>
+          </div>
+          <div class="cmd-row" style="border-radius:6px;overflow:hidden;border:1px solid var(--border);margin-top:7px">
+            <span class="cmd-label lbl-check">Windows</span>
+            <span class="cmd-code">Copy-Item .env.example .env</span>
+            <button class="cmd-copy" onclick="copyCmd(this, 'Copy-Item .env.example .env')" title="Copy">⧉</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-num">3</div>
+        <div class="step-content">
+          <div class="step-title">Generate a SECRET_KEY</div>
+          <div class="step-desc">Paste the output into your <code style="font-family:var(--mono);font-size:12px">.env</code> file.</div>
+          <div class="cmd-row" style="border-radius:6px;overflow:hidden;border:1px solid var(--border)">
+            <span class="cmd-code" style="padding:8px 14px">python -c "import secrets; print(secrets.token_hex(32))"</span>
+            <button class="cmd-copy" onclick="copyCmd(this, 'python -c \"import secrets; print(secrets.token_hex(32))\"')" title="Copy">⧉</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-num">4</div>
+        <div class="step-content">
+          <div class="step-title">Start a stack</div>
+          <div class="step-desc">Choose the stack you want to run. All services start automatically.</div>
+          <div class="cmd-row" style="border-radius:6px;overflow:hidden;border:1px solid var(--border)">
+            <span class="cmd-label lbl-check">monolith dev</span>
+            <span class="cmd-code">make dev-build</span>
+            <button class="cmd-copy" onclick="copyCmd(this, 'make dev-build')" title="Copy">⧉</button>
+          </div>
+          <div class="cmd-row" style="border-radius:6px;overflow:hidden;border:1px solid var(--border);margin-top:7px">
+            <span class="cmd-label lbl-check">CQRS stack</span>
+            <span class="cmd-code">make cqrs-build</span>
+            <button class="cmd-copy" onclick="copyCmd(this, 'make cqrs-build')" title="Copy">⧉</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-num">5</div>
+        <div class="step-content">
+          <div class="step-title">Run database migrations (monolith dev only)</div>
+          <div class="step-desc">Required on first start to create tables in PostgreSQL. CQRS services create their tables automatically via SQLAlchemy on startup.</div>
+          <div class="cmd-row" style="border-radius:6px;overflow:hidden;border:1px solid var(--border)">
+            <span class="cmd-code" style="padding:8px 14px">make migrate</span>
+            <button class="cmd-copy" onclick="copyCmd(this, 'make migrate')" title="Copy">⧉</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="divider"></div>
+
+  <!-- ── Section 3: Kubernetes ─────────────────────────────────── -->
+  <div class="section">
+    <div class="section-header">
+      <div class="section-icon icon-blue">☸</div>
+      <div>
+        <div class="section-title">Kubernetes Deployment</div>
+        <div class="section-subtitle">Only needed if you're deploying to a Kubernetes cluster</div>
+      </div>
+      <span class="section-tag tag-optional">optional</span>
+    </div>
+
+    <!-- kubectl -->
+    <div class="req-card" data-id="kubectl">
+      <div class="req-top">
+        <div class="req-check" onclick="toggleCheck(this)">
+          <svg class="check-icon" width="13" height="13" viewBox="0 0 13 13" fill="none">
+            <path d="M2.5 6.5L5 9L10.5 3.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <div class="req-body">
+          <div class="req-head">
+            <span class="req-name">kubectl</span>
+            <span class="req-version">≥ 1.28</span>
+            <span class="req-badge badge-amber">k8s only</span>
+          </div>
+          <p class="req-desc">Kubernetes CLI for applying manifests in <code style="font-family:var(--mono);font-size:12px">k8s/</code>. Must match your cluster's server version within ±1 minor version.</p>
+          <div class="req-commands">
+            <div class="cmd-row">
+              <span class="cmd-label lbl-check">verify</span>
+              <span class="cmd-code">kubectl version --client</span>
+              <button class="cmd-copy" onclick="copyCmd(this, 'kubectl version --client')" title="Copy">⧉</button>
+            </div>
+            <div class="cmd-row">
+              <span class="cmd-label lbl-install">docs</span>
+              <span class="cmd-code">https://kubernetes.io/docs/tasks/tools/</span>
+              <button class="cmd-copy" onclick="copyCmd(this, 'https://kubernetes.io/docs/tasks/tools/')" title="Copy">⧉</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Helm -->
+    <div class="req-card" data-id="helm">
+      <div class="req-top">
+        <div class="req-check" onclick="toggleCheck(this)">
+          <svg class="check-icon" width="13" height="13" viewBox="0 0 13 13" fill="none">
+            <path d="M2.5 6.5L5 9L10.5 3.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <div class="req-body">
+          <div class="req-head">
+            <span class="req-name">Helm</span>
+            <span class="req-version">≥ 3.14</span>
+            <span class="req-badge badge-amber">k8s only</span>
+          </div>
+          <p class="req-desc">Kubernetes package manager. Used to deploy infrastructure charts (Kafka, PostgreSQL, Zookeeper) into the <code style="font-family:var(--mono);font-size:12px">plots-system</code> namespace.</p>
+          <div class="req-commands">
+            <div class="cmd-row">
+              <span class="cmd-label lbl-check">verify</span>
+              <span class="cmd-code">helm version</span>
+              <button class="cmd-copy" onclick="copyCmd(this, 'helm version')" title="Copy">⧉</button>
+            </div>
+            <div class="cmd-row">
+              <span class="cmd-label lbl-install">install</span>
+              <span class="cmd-code">https://helm.sh/docs/intro/install/</span>
+              <button class="cmd-copy" onclick="copyCmd(this, 'https://helm.sh/docs/intro/install/')" title="Copy">⧉</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Cluster -->
+    <div class="req-card" data-id="cluster">
+      <div class="req-top">
+        <div class="req-check" onclick="toggleCheck(this)">
+          <svg class="check-icon" width="13" height="13" viewBox="0 0 13 13" fill="none">
+            <path d="M2.5 6.5L5 9L10.5 3.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <div class="req-body">
+          <div class="req-head">
+            <span class="req-name">Kubernetes Cluster</span>
+            <span class="req-badge badge-amber">k8s only</span>
+          </div>
+          <p class="req-desc">Any CNCF-conformant cluster works. For local testing, use minikube or kind; for production, use GKE / EKS / AKS.</p>
+          <div class="req-commands">
+            <div class="cmd-row">
+              <span class="cmd-label lbl-install">local — minikube</span>
+              <span class="cmd-code">minikube start --cpus 4 --memory 8192</span>
+              <button class="cmd-copy" onclick="copyCmd(this, 'minikube start --cpus 4 --memory 8192')" title="Copy">⧉</button>
+            </div>
+            <div class="cmd-row">
+              <span class="cmd-label lbl-install">local — kind</span>
+              <span class="cmd-code">kind create cluster --name plots</span>
+              <button class="cmd-copy" onclick="copyCmd(this, 'kind create cluster --name plots')" title="Copy">⧉</button>
+            </div>
+          </div>
+          <div class="req-note">
+            Kafka StatefulSets need at least 4 CPUs and 8 GB RAM on the cluster. Allocate accordingly in minikube.
+          </div>
+        </div>
+      </div>
+    </div>
+  </div><!-- /section -->
+
+  <div class="divider"></div>
+
+  <!-- ── Section 4: External Services ─────────────────────────── -->
+  <div class="section">
+    <div class="section-header">
+      <div class="section-icon icon-amber">🔑</div>
+      <div>
+        <div class="section-title">External Services &amp; Credentials</div>
+        <div class="section-subtitle">Enable these features by adding credentials to your .env</div>
+      </div>
+      <span class="section-tag tag-optional">optional</span>
+    </div>
+
+    <!-- Google OAuth -->
+    <div class="req-card" data-id="google-oauth">
+      <div class="req-top">
+        <div class="req-check" onclick="toggleCheck(this)">
+          <svg class="check-icon" width="13" height="13" viewBox="0 0 13 13" fill="none">
+            <path d="M2.5 6.5L5 9L10.5 3.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <div class="req-body">
+          <div class="req-head">
+            <span class="req-name">Google OAuth 2.0</span>
+            <span class="req-badge badge-amber">optional</span>
+          </div>
+          <p class="req-desc">
+            Enables "Sign in with Google". Set <code style="font-family:var(--mono);font-size:12px">AUTH_GOOGLE_ENABLED=true</code> in <code style="font-family:var(--mono);font-size:12px">.env</code> to activate.
+          </p>
+          <div class="req-commands">
+            <div class="cmd-row">
+              <span class="cmd-label lbl-install">console</span>
+              <span class="cmd-code">console.cloud.google.com → APIs → Credentials → Create OAuth 2.0 Client</span>
+              <button class="cmd-copy" onclick="copyCmd(this, 'console.cloud.google.com')" title="Copy">⧉</button>
+            </div>
+          </div>
+          <div class="req-note">
+            Add <code style="font-family:var(--mono);font-size:12px">http://localhost/api/auth/google/callback</code> to Authorised redirect URIs.
+            <br>Set <code style="font-family:var(--mono);font-size:12px">GOOGLE_CLIENT_ID</code> and <code style="font-family:var(--mono);font-size:12px">GOOGLE_CLIENT_SECRET</code> in <code style="font-family:var(--mono);font-size:12px">.env</code>.
+            <br><strong>Never commit real credentials to git.</strong>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Azure AD -->
+    <div class="req-card" data-id="azure-ad">
+      <div class="req-top">
+        <div class="req-check" onclick="toggleCheck(this)">
+          <svg class="check-icon" width="13" height="13" viewBox="0 0 13 13" fill="none">
+            <path d="M2.5 6.5L5 9L10.5 3.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <div class="req-body">
+          <div class="req-head">
+            <span class="req-name">Azure AD (Microsoft SSO)</span>
+            <span class="req-badge badge-amber">optional</span>
+          </div>
+          <p class="req-desc">Enables enterprise SSO via Microsoft accounts. Set <code style="font-family:var(--mono);font-size:12px">AUTH_AZURE_ENABLED=true</code>.</p>
+          <div class="req-commands">
+            <div class="cmd-row">
+              <span class="cmd-label lbl-install">portal</span>
+              <span class="cmd-code">portal.azure.com → Azure AD → App registrations → New registration</span>
+              <button class="cmd-copy" onclick="copyCmd(this, 'portal.azure.com')" title="Copy">⧉</button>
+            </div>
+          </div>
+          <div class="req-note">
+            Add redirect URI: <code style="font-family:var(--mono);font-size:12px">http://localhost/api/auth/azure/callback</code>
+            <br>Set <code style="font-family:var(--mono);font-size:12px">AZURE_CLIENT_ID</code>, <code style="font-family:var(--mono);font-size:12px">AZURE_CLIENT_SECRET</code>, <code style="font-family:var(--mono);font-size:12px">AZURE_TENANT_ID</code>.
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SendGrid -->
+    <div class="req-card" data-id="sendgrid">
+      <div class="req-top">
+        <div class="req-check" onclick="toggleCheck(this)">
+          <svg class="check-icon" width="13" height="13" viewBox="0 0 13 13" fill="none">
+            <path d="M2.5 6.5L5 9L10.5 3.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <div class="req-body">
+          <div class="req-head">
+            <span class="req-name">SendGrid</span>
+            <span class="req-badge badge-amber">optional</span>
+          </div>
+          <p class="req-desc">Transactional email (password reset, account verification, notifications). Delivered via Celery worker task.</p>
+          <div class="req-commands">
+            <div class="cmd-row">
+              <span class="cmd-label lbl-install">dashboard</span>
+              <span class="cmd-code">app.sendgrid.com → Settings → API Keys → Create API Key</span>
+              <button class="cmd-copy" onclick="copyCmd(this, 'app.sendgrid.com')" title="Copy">⧉</button>
+            </div>
+          </div>
+          <div class="req-note">
+            Set <code style="font-family:var(--mono);font-size:12px">SENDGRID_API_KEY</code> and <code style="font-family:var(--mono);font-size:12px">FROM_EMAIL</code>. The sender address must be a verified sender identity in SendGrid.
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Twilio -->
+    <div class="req-card" data-id="twilio">
+      <div class="req-top">
+        <div class="req-check" onclick="toggleCheck(this)">
+          <svg class="check-icon" width="13" height="13" viewBox="0 0 13 13" fill="none">
+            <path d="M2.5 6.5L5 9L10.5 3.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <div class="req-body">
+          <div class="req-head">
+            <span class="req-name">Twilio</span>
+            <span class="req-badge badge-amber">optional</span>
+          </div>
+          <p class="req-desc">SMS notifications. Requires an active Twilio phone number with SMS capability.</p>
+          <div class="req-commands">
+            <div class="cmd-row">
+              <span class="cmd-label lbl-install">console</span>
+              <span class="cmd-code">console.twilio.com → Account → API keys &amp; tokens</span>
+              <button class="cmd-copy" onclick="copyCmd(this, 'console.twilio.com')" title="Copy">⧉</button>
+            </div>
+          </div>
+          <div class="req-note">
+            Set <code style="font-family:var(--mono);font-size:12px">TWILIO_ACCOUNT_SID</code>, <code style="font-family:var(--mono);font-size:12px">TWILIO_AUTH_TOKEN</code>, and <code style="font-family:var(--mono);font-size:12px">TWILIO_FROM_NUMBER</code>.
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Azure Blob -->
+    <div class="req-card" data-id="azure-blob">
+      <div class="req-top">
+        <div class="req-check" onclick="toggleCheck(this)">
+          <svg class="check-icon" width="13" height="13" viewBox="0 0 13 13" fill="none">
+            <path d="M2.5 6.5L5 9L10.5 3.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <div class="req-body">
+          <div class="req-head">
+            <span class="req-name">Azure Blob Storage</span>
+            <span class="req-badge badge-amber">optional</span>
+          </div>
+          <p class="req-desc">File uploads (images, attachments). Without this, the uploads API returns errors for any file upload request.</p>
+          <div class="req-commands">
+            <div class="cmd-row">
+              <span class="cmd-label lbl-install">portal</span>
+              <span class="cmd-code">portal.azure.com → Storage accounts → Create → Get connection string</span>
+              <button class="cmd-copy" onclick="copyCmd(this, 'portal.azure.com')" title="Copy">⧉</button>
+            </div>
+          </div>
+          <div class="req-note">
+            Set <code style="font-family:var(--mono);font-size:12px">AZURE_STORAGE_CONNECTION_STRING</code> and <code style="font-family:var(--mono);font-size:12px">AZURE_STORAGE_CONTAINER</code> (default: <code style="font-family:var(--mono);font-size:12px">uploads</code>).
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Stripe -->
+    <div class="req-card" data-id="stripe">
+      <div class="req-top">
+        <div class="req-check" onclick="toggleCheck(this)">
+          <svg class="check-icon" width="13" height="13" viewBox="0 0 13 13" fill="none">
+            <path d="M2.5 6.5L5 9L10.5 3.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <div class="req-body">
+          <div class="req-head">
+            <span class="req-name">Stripe</span>
+            <span class="req-badge badge-amber">optional</span>
+          </div>
+          <p class="req-desc">Payments module. Currently a placeholder — the payments router is registered but no business logic is wired. Only needed when the payments feature is implemented.</p>
+          <div class="req-commands">
+            <div class="cmd-row">
+              <span class="cmd-label lbl-install">dashboard</span>
+              <span class="cmd-code">dashboard.stripe.com → Developers → API keys</span>
+              <button class="cmd-copy" onclick="copyCmd(this, 'dashboard.stripe.com')" title="Copy">⧉</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div><!-- /section -->
+
+  <div class="divider"></div>
+
+  <!-- ── Section 5: Env vars ───────────────────────────────────── -->
+  <div class="section">
+    <div class="section-header">
+      <div class="section-icon icon-green">⚙</div>
+      <div>
+        <div class="section-title">Minimum .env Configuration</div>
+        <div class="section-subtitle">Copy this into your .env file to get the dev stack running</div>
+      </div>
+      <span class="section-tag tag-config">config</span>
+    </div>
+
+    <div class="env-block">
+      <div class="env-header">
+        <span class="env-header-title">
+          <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><rect x="1.5" y="1.5" width="10" height="10" rx="1.5" stroke="currentColor" stroke-width="1.5"/><path d="M4 6.5h5M6.5 4v5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+          <span class="env-file">.env</span>
+          <span style="color:var(--faint)">— place in project root</span>
+        </span>
+        <button class="env-copy-all" onclick="copyEnv()">Copy all</button>
+      </div>
+      <pre class="env-pre" id="env-pre"><span class="env-comment"># ── Core ──────────────────────────────────────────────────────────</span>
+<span class="env-key">SECRET_KEY</span><span class="env-eq">=</span><span class="env-placeholder">&lt;generate: python -c "import secrets; print(secrets.token_hex(32))"&gt;</span>
+<span class="env-key">DEBUG</span><span class="env-eq">=</span><span class="env-val">true</span>
+<span class="env-key">ALLOWED_ORIGINS</span><span class="env-eq">=</span><span class="env-val">http://localhost,http://localhost:3000,http://localhost:8000</span>
+
+<span class="env-comment"># ── Database ──────────────────────────────────────────────────────</span>
+<span class="env-key">POSTGRES_USER</span><span class="env-eq">=</span><span class="env-val">mvp_user</span>
+<span class="env-key">POSTGRES_PASSWORD</span><span class="env-eq">=</span><span class="env-placeholder">&lt;choose a strong password&gt;</span>
+<span class="env-key">POSTGRES_DB</span><span class="env-eq">=</span><span class="env-val">mvp_db</span>
+<span class="env-key">DATABASE_URL</span><span class="env-eq">=</span><span class="env-val">postgresql+asyncpg://mvp_user:${POSTGRES_PASSWORD}@postgres:5432/mvp_db</span>
+
+<span class="env-comment"># ── Redis ─────────────────────────────────────────────────────────</span>
+<span class="env-key">REDIS_URL</span><span class="env-eq">=</span><span class="env-val">redis://redis:6379/0</span>
+
+<span class="env-comment"># ── Auth ──────────────────────────────────────────────────────────</span>
+<span class="env-key">AUTH_EMAIL_ENABLED</span><span class="env-eq">=</span><span class="env-val">true</span>
+<span class="env-key">AUTH_GOOGLE_ENABLED</span><span class="env-eq">=</span><span class="env-val">false</span>
+<span class="env-key">AUTH_AZURE_ENABLED</span><span class="env-eq">=</span><span class="env-val">false</span>
+<span class="env-key">ACCESS_TOKEN_EXPIRE_MINUTES</span><span class="env-eq">=</span><span class="env-val">30</span>
+<span class="env-key">REFRESH_TOKEN_EXPIRE_DAYS</span><span class="env-eq">=</span><span class="env-val">7</span>
+
+<span class="env-comment"># ── pgAdmin (dev stack only) ───────────────────────────────────────</span>
+<span class="env-key">PGADMIN_DEFAULT_EMAIL</span><span class="env-eq">=</span><span class="env-val">admin@mvp.dev</span>
+<span class="env-key">PGADMIN_DEFAULT_PASSWORD</span><span class="env-eq">=</span><span class="env-val">admin</span>
+
+<span class="env-comment"># ── Optional: Google OAuth ─────────────────────────────────────────</span>
+<span class="env-comment"># AUTH_GOOGLE_ENABLED=true</span>
+<span class="env-comment"># GOOGLE_CLIENT_ID=&lt;from Google Cloud Console&gt;</span>
+<span class="env-comment"># GOOGLE_CLIENT_SECRET=&lt;from Google Cloud Console&gt;</span>
+<span class="env-comment"># GOOGLE_OAUTH_REDIRECT_URI=http://localhost/api/auth/google/callback</span>
+
+<span class="env-comment"># ── Optional: Email (SendGrid) ─────────────────────────────────────</span>
+<span class="env-comment"># SENDGRID_API_KEY=&lt;your-key&gt;</span>
+<span class="env-comment"># FROM_EMAIL=noreply@yourapp.com</span>
+
+<span class="env-comment"># ── Optional: File Uploads (Azure Blob) ───────────────────────────</span>
+<span class="env-comment"># AZURE_STORAGE_CONNECTION_STRING=&lt;from Azure Portal&gt;</span>
+<span class="env-comment"># AZURE_STORAGE_CONTAINER=uploads</span></pre>
+    </div>
+  </div><!-- /section -->
+
+  <!-- ── Port reference ────────────────────────────────────────── -->
+  <div class="section">
+    <div class="section-header">
+      <div class="section-icon icon-blue">🔌</div>
+      <div>
+        <div class="section-title">Port Reference</div>
+        <div class="section-subtitle">Ports exposed by each stack on your local machine</div>
+      </div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px">
+
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:18px 20px">
+        <div style="font-size:12px;font-family:var(--mono);color:var(--blue);margin-bottom:14px;letter-spacing:.05em">MONOLITH DEV STACK</div>
+        <div style="display:flex;flex-direction:column;gap:8px;font-family:var(--mono);font-size:12.5px">
+          <div style="display:flex;justify-content:space-between"><span style="color:var(--muted)">:80</span><span>App (Nginx + FastAPI + Next.js)</span></div>
+          <div style="display:flex;justify-content:space-between"><span style="color:var(--muted)">:5432</span><span>PostgreSQL</span></div>
+          <div style="display:flex;justify-content:space-between"><span style="color:var(--muted)">:6379</span><span>Redis</span></div>
+          <div style="display:flex;justify-content:space-between"><span style="color:var(--muted)">:5050</span><span>pgAdmin</span></div>
+          <div style="display:flex;justify-content:space-between"><span style="color:var(--muted)">:8081</span><span>Redis Commander</span></div>
+        </div>
+      </div>
+
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:18px 20px">
+        <div style="font-size:12px;font-family:var(--mono);color:var(--violet);margin-bottom:14px;letter-spacing:.05em">CQRS MICROSERVICES STACK</div>
+        <div style="display:flex;flex-direction:column;gap:8px;font-family:var(--mono);font-size:12.5px">
+          <div style="display:flex;justify-content:space-between"><span style="color:var(--muted)">:8000</span><span>API Gateway</span></div>
+          <div style="display:flex;justify-content:space-between"><span style="color:var(--muted)">:8090</span><span>Kafka UI</span></div>
+          <div style="display:flex;justify-content:space-between"><span style="color:var(--muted)">:9092</span><span>Kafka broker</span></div>
+          <div style="display:flex;justify-content:space-between"><span style="color:var(--muted)">:5432</span><span style="color:var(--amber)">PostgreSQL ⚠ conflict</span></div>
+        </div>
+        <div style="margin-top:12px;font-size:12px;color:var(--amber);background:var(--amber-glow);border:1px solid rgba(245,158,11,.2);border-radius:6px;padding:8px 10px;line-height:1.5">
+          Both stacks bind :5432. Run them one at a time, or change <code style="font-family:var(--mono)">POSTGRES_PORT</code> in .env before starting the second stack.
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+</div><!-- /container -->
+
+<script>
+  const STORAGE_KEY = 'plots-prereq-checks';
+
+  function getChecked() {
+    try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}'); }
+    catch { return {}; }
+  }
+
+  function saveChecked(map) {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(map));
+  }
+
+  function toggleCheck(el) {
+    const card = el.closest('.req-card');
+    const id = card.dataset.id;
+    const checked = getChecked();
+    if (card.classList.contains('checked')) {
+      card.classList.remove('checked');
+      delete checked[id];
+    } else {
+      card.classList.add('checked');
+      checked[id] = true;
+    }
+    saveChecked(checked);
+    updateProgress();
+  }
+
+  function updateProgress() {
+    const cards = document.querySelectorAll('.req-card');
+    const done = document.querySelectorAll('.req-card.checked').length;
+    const total = cards.length;
+    const pct = total ? Math.round((done / total) * 100) : 0;
+    document.getElementById('done-count').textContent = done;
+    document.getElementById('total-count').textContent = total;
+    document.getElementById('progress-fill').style.width = pct + '%';
+    document.getElementById('progress-pct').textContent = pct + '%';
+  }
+
+  function restoreState() {
+    const checked = getChecked();
+    document.querySelectorAll('.req-card').forEach(card => {
+      if (checked[card.dataset.id]) card.classList.add('checked');
+    });
+    updateProgress();
+  }
+
+  function copyCmd(btn, text) {
+    navigator.clipboard.writeText(text).then(() => {
+      const orig = btn.textContent;
+      btn.textContent = '✓';
+      btn.classList.add('copied');
+      setTimeout(() => { btn.textContent = orig; btn.classList.remove('copied'); }, 1600);
+    });
+  }
+
+  function copyEnv() {
+    const pre = document.getElementById('env-pre');
+    const text = pre.innerText || pre.textContent;
+    navigator.clipboard.writeText(text).then(() => {
+      const btn = document.querySelector('.env-copy-all');
+      const orig = btn.textContent;
+      btn.textContent = 'Copied ✓';
+      setTimeout(() => btn.textContent = orig, 1800);
+    });
+  }
+
+  restoreState();
+</script>

@@ -1,0 +1,60 @@
+{
+  "topics": [
+    {
+      "name": "chat.events",
+      "partitions": 12,
+      "replication_factor": 3,
+      "config": {
+        "retention.ms": "604800000",
+        "min.insync.replicas": "2",
+        "cleanup.policy": "delete"
+      },
+      "description": "All single-message chat domain events (created, deleted). Partitioned by session_id."
+    },
+    {
+      "name": "chat.bulk.commands",
+      "partitions": 6,
+      "replication_factor": 3,
+      "config": {
+        "retention.ms": "86400000",
+        "min.insync.replicas": "2",
+        "cleanup.policy": "delete"
+      },
+      "description": "Bulk chat message creation events. Partitioned by session_id."
+    },
+    {
+      "name": "plot.events",
+      "partitions": 12,
+      "replication_factor": 3,
+      "config": {
+        "retention.ms": "2592000000",
+        "min.insync.replicas": "2",
+        "cleanup.policy": "delete"
+      },
+      "description": "All single-plot domain events (created, updated, deleted). Partitioned by user_id."
+    },
+    {
+      "name": "plot.bulk.commands",
+      "partitions": 6,
+      "replication_factor": 3,
+      "config": {
+        "retention.ms": "86400000",
+        "min.insync.replicas": "2",
+        "cleanup.policy": "delete"
+      },
+      "description": "Bulk plot creation events. Partitioned by user_id."
+    }
+  ],
+  "consumer_groups": [
+    {
+      "id": "chat-query-projector",
+      "topics": ["chat.events", "chat.bulk.commands"],
+      "service": "chat-query"
+    },
+    {
+      "id": "plot-query-projector",
+      "topics": ["plot.events", "plot.bulk.commands"],
+      "service": "plot-query"
+    }
+  ]
+}

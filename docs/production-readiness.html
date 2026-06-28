@@ -1,0 +1,951 @@
+<title>Production Readiness Audit — Plots</title>
+<meta name="description" content="Production readiness assessment for the Plots monorepo. Covers security, observability, reliability, Kubernetes configuration, error handling, secrets management, CORS, and database.">
+
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg:       #0F0E12;
+  --s1:       #161519;
+  --s2:       #1E1C22;
+  --s3:       #252330;
+  --border:   #2C2933;
+  --border2:  #38354A;
+  --text:     #E2E8F0;
+  --muted:    #9B9AAD;
+  --faint:    #4A4860;
+
+  --crit:     #EF4444;
+  --crit-bg:  rgba(239,68,68,.09);
+  --crit-bdr: rgba(239,68,68,.28);
+  --major:    #F59E0B;
+  --major-bg: rgba(245,158,11,.09);
+  --major-bdr:rgba(245,158,11,.28);
+  --minor:    #3B82F6;
+  --minor-bg: rgba(59,130,246,.09);
+  --minor-bdr:rgba(59,130,246,.28);
+  --good:     #10B981;
+  --good-bg:  rgba(16,185,129,.09);
+  --good-bdr: rgba(16,185,129,.28);
+
+  --mono: 'Cascadia Code','JetBrains Mono','Fira Code',monospace;
+  --sans: -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+}
+
+html { scroll-behavior: smooth; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--sans);
+  font-size: 14.5px;
+  line-height: 1.65;
+}
+
+/* ── Sticky verdict bar ─────────────────────────────────── */
+.verdict-bar {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  background: rgba(15,14,18,.92);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--border);
+  padding: 10px 32px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+}
+.verdict-name {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--muted);
+  letter-spacing: .06em;
+}
+.verdict-score-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.verdict-num {
+  font-family: var(--mono);
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--major);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+.verdict-track {
+  width: 160px;
+  height: 4px;
+  background: var(--border2);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.verdict-fill {
+  height: 100%;
+  background: var(--major);
+  border-radius: 2px;
+  width: 50%;
+}
+.verdict-label {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--major);
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+/* ── Critical banner ─────────────────────────────────────── */
+.crit-banner {
+  background: var(--crit-bg);
+  border-bottom: 1px solid var(--crit-bdr);
+  padding: 14px 32px;
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+}
+.crit-banner-icon {
+  font-size: 18px;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+.crit-banner-body { flex: 1; }
+.crit-banner-title {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--crit);
+  margin-bottom: 4px;
+  font-family: var(--mono);
+  letter-spacing: .03em;
+}
+.crit-banner-text {
+  font-size: 13px;
+  color: #FCA5A5;
+  line-height: 1.55;
+}
+.crit-banner-text code {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  background: rgba(239,68,68,.15);
+  padding: 1px 5px;
+  border-radius: 3px;
+  color: #FCA5A5;
+}
+
+/* ── Page container ──────────────────────────────────────── */
+.page { max-width: 900px; margin: 0 auto; padding: 48px 32px 100px; }
+
+/* ── Report header ───────────────────────────────────────── */
+.report-header { margin-bottom: 44px; }
+.report-eyebrow {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--faint);
+  margin-bottom: 10px;
+}
+.report-title {
+  font-size: clamp(22px, 4vw, 34px);
+  font-weight: 700;
+  letter-spacing: -.025em;
+  color: #fff;
+  text-wrap: balance;
+  margin-bottom: 10px;
+  line-height: 1.2;
+}
+.report-subtitle {
+  font-size: 14.5px;
+  color: var(--muted);
+  max-width: 580px;
+  line-height: 1.6;
+}
+
+/* ── Score grid ──────────────────────────────────────────── */
+.score-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 10px;
+  margin-bottom: 48px;
+}
+.score-card {
+  background: var(--s1);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px 18px;
+}
+.score-card-dim {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 10px;
+}
+.score-card-num-row {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  margin-bottom: 10px;
+}
+.score-card-num {
+  font-family: var(--mono);
+  font-size: 28px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+.score-card-denom {
+  font-family: var(--mono);
+  font-size: 14px;
+  color: var(--faint);
+}
+.score-card-bar {
+  height: 3px;
+  background: var(--border2);
+  border-radius: 2px;
+  overflow: hidden;
+  margin-bottom: 8px;
+}
+.score-card-fill { height: 100%; border-radius: 2px; }
+.score-card-status {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+}
+
+.sc-crit  .score-card-num   { color: var(--crit); }
+.sc-crit  .score-card-fill  { background: var(--crit); }
+.sc-crit  .score-card-status{ color: var(--crit); }
+.sc-major .score-card-num   { color: var(--major); }
+.sc-major .score-card-fill  { background: var(--major); }
+.sc-major .score-card-status{ color: var(--major); }
+.sc-minor .score-card-num   { color: var(--minor); }
+.sc-minor .score-card-fill  { background: var(--minor); }
+.sc-minor .score-card-status{ color: var(--minor); }
+.sc-good  .score-card-num   { color: var(--good); }
+.sc-good  .score-card-fill  { background: var(--good); }
+.sc-good  .score-card-status{ color: var(--good); }
+
+/* ── Section ─────────────────────────────────────────────── */
+.section { margin-bottom: 52px; }
+.section-header {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  margin-bottom: 18px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--border);
+}
+h2 {
+  font-size: 16px;
+  font-weight: 700;
+  color: #fff;
+  letter-spacing: -.01em;
+}
+.section-count {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--faint);
+  letter-spacing: .05em;
+}
+
+/* ── Finding rows ────────────────────────────────────────── */
+.findings { display: flex; flex-direction: column; gap: 8px; }
+
+.finding {
+  border-left: 3px solid transparent;
+  background: var(--s1);
+  border-radius: 0 6px 6px 0;
+  padding: 13px 16px;
+  border-top: 1px solid var(--border);
+  border-right: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+
+.finding-crit  { border-left-color: var(--crit);  background: linear-gradient(90deg, var(--crit-bg) 0%, var(--s1) 30%); }
+.finding-major { border-left-color: var(--major); background: linear-gradient(90deg, var(--major-bg) 0%, var(--s1) 30%); }
+.finding-minor { border-left-color: var(--minor); background: linear-gradient(90deg, var(--minor-bg) 0%, var(--s1) 30%); }
+.finding-good  { border-left-color: var(--good);  background: linear-gradient(90deg, var(--good-bg) 0%, var(--s1) 30%); }
+
+.finding-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-bottom: 5px;
+}
+.finding-sev {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  padding: 2px 7px;
+  border-radius: 3px;
+  white-space: nowrap;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+.sev-crit  { background: var(--crit-bg);  color: var(--crit);  border: 1px solid var(--crit-bdr); }
+.sev-major { background: var(--major-bg); color: var(--major); border: 1px solid var(--major-bdr); }
+.sev-minor { background: var(--minor-bg); color: var(--minor); border: 1px solid var(--minor-bdr); }
+.sev-good  { background: var(--good-bg);  color: var(--good);  border: 1px solid var(--good-bdr); }
+
+.finding-title {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: #fff;
+  line-height: 1.4;
+}
+.finding-desc {
+  font-size: 13px;
+  color: var(--muted);
+  line-height: 1.55;
+  margin-top: 4px;
+}
+.finding-desc code {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  background: var(--s3);
+  border: 1px solid var(--border2);
+  padding: 1px 5px;
+  border-radius: 3px;
+  color: var(--text);
+}
+.finding-action {
+  margin-top: 8px;
+  font-size: 12.5px;
+  font-family: var(--mono);
+  color: var(--muted);
+  background: var(--s2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 7px 10px;
+  line-height: 1.6;
+}
+.finding-action::before {
+  content: '→ ';
+  color: var(--faint);
+}
+
+/* ── Immediate actions list ──────────────────────────────── */
+.action-list { display: flex; flex-direction: column; gap: 8px; }
+.action-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  background: var(--s1);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 13px 16px;
+}
+.action-num {
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--faint);
+  min-width: 20px;
+  margin-top: 2px;
+  letter-spacing: .04em;
+}
+.action-body { flex: 1; }
+.action-title { font-size: 13.5px; font-weight: 600; color: #fff; margin-bottom: 3px; }
+.action-desc  { font-size: 13px; color: var(--muted); line-height: 1.5; }
+.action-desc code {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  background: var(--s3);
+  border: 1px solid var(--border2);
+  padding: 1px 5px;
+  border-radius: 3px;
+  color: var(--text);
+}
+.action-sev { flex-shrink: 0; margin-top: 2px; }
+
+/* ── What works ──────────────────────────────────────────── */
+.positives {
+  background: var(--good-bg);
+  border: 1px solid var(--good-bdr);
+  border-radius: 8px;
+  padding: 20px 22px;
+}
+.positives-title {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--good);
+  margin-bottom: 14px;
+}
+.positive-list {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.positive-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 13.5px;
+  color: #6EE7B7;
+  line-height: 1.5;
+}
+.positive-item::before {
+  content: '✓';
+  color: var(--good);
+  font-weight: 700;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+/* ── Details/accordion ───────────────────────────────────── */
+details { margin-bottom: 8px; }
+details > summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 12px 16px;
+  background: var(--s1);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  transition: background .15s;
+  user-select: none;
+}
+details > summary::-webkit-details-marker { display: none; }
+details > summary:hover { background: var(--s2); }
+details[open] > summary { border-radius: 6px 6px 0 0; border-bottom-color: transparent; }
+.summary-arrow {
+  margin-left: auto;
+  color: var(--faint);
+  font-family: var(--mono);
+  font-size: 12px;
+  transition: transform .2s;
+}
+details[open] .summary-arrow { transform: rotate(90deg); }
+.summary-score {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 3px;
+}
+.details-body {
+  border: 1px solid var(--border);
+  border-top: none;
+  border-radius: 0 0 6px 6px;
+  padding: 12px 12px 4px;
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 0;
+}
+
+/* ── Divider ─────────────────────────────────────────────── */
+.divider { height: 1px; background: var(--border); margin: 44px 0; }
+
+/* ── Scrollbar ───────────────────────────────────────────── */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: var(--s1); }
+::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 4px; }
+
+@media (max-width: 600px) {
+  .page { padding: 32px 16px 80px; }
+  .verdict-bar { padding: 10px 16px; }
+  .crit-banner { padding: 12px 16px; }
+  .score-grid { grid-template-columns: repeat(2, 1fr); }
+  .verdict-track { width: 100px; }
+}
+</style>
+
+<!-- Sticky verdict bar -->
+<div class="verdict-bar">
+  <span class="verdict-name">PLOTS / PRODUCTION READINESS</span>
+  <div class="verdict-score-row">
+    <span class="verdict-num">5.0</span>
+    <div class="verdict-track"><div class="verdict-fill"></div></div>
+    <span class="verdict-label">Not production-ready</span>
+  </div>
+</div>
+
+<!-- Critical banner -->
+<div class="crit-banner">
+  <span class="crit-banner-icon">⛔</span>
+  <div class="crit-banner-body">
+    <div class="crit-banner-title">Immediate action required — live credentials detected in .env</div>
+    <div class="crit-banner-text">
+      Active Google OAuth, Azure AD, and OpenAI credentials were found in the <code>.env</code> file. Even if <code>.env</code> is in <code>.gitignore</code>, the file appears in git history. <strong>Rotate all four credentials now</strong> before continuing, then run <code>git log --all -- .env</code> to audit exposure.
+    </div>
+  </div>
+</div>
+
+<div class="page">
+
+  <!-- Header -->
+  <div class="report-header">
+    <div class="report-eyebrow">Technical audit · June 2026</div>
+    <h1 class="report-title">Is the current architecture production-ready?</h1>
+    <p class="report-subtitle">
+      The foundation is solid — CQRS event sourcing, async SQLAlchemy, Kafka with idempotent producers, K8s HPAs with resource limits. But eight gaps need to close before this ships to real users. Here's exactly what's missing and in what order to fix it.
+    </p>
+  </div>
+
+  <!-- Score grid -->
+  <div class="score-grid">
+    <div class="score-card sc-crit">
+      <div class="score-card-dim">Secrets Mgmt</div>
+      <div class="score-card-num-row"><span class="score-card-num">2</span><span class="score-card-denom">/10</span></div>
+      <div class="score-card-bar"><div class="score-card-fill" style="width:20%"></div></div>
+      <div class="score-card-status">Critical</div>
+    </div>
+    <div class="score-card sc-crit">
+      <div class="score-card-dim">Security</div>
+      <div class="score-card-num-row"><span class="score-card-num">4</span><span class="score-card-denom">/10</span></div>
+      <div class="score-card-bar"><div class="score-card-fill" style="width:40%"></div></div>
+      <div class="score-card-status">Critical</div>
+    </div>
+    <div class="score-card sc-major">
+      <div class="score-card-dim">Observability</div>
+      <div class="score-card-num-row"><span class="score-card-num">5</span><span class="score-card-denom">/10</span></div>
+      <div class="score-card-bar"><div class="score-card-fill" style="width:50%"></div></div>
+      <div class="score-card-status">Major gaps</div>
+    </div>
+    <div class="score-card sc-major">
+      <div class="score-card-dim">Error Handling</div>
+      <div class="score-card-num-row"><span class="score-card-num">5</span><span class="score-card-denom">/10</span></div>
+      <div class="score-card-bar"><div class="score-card-fill" style="width:50%"></div></div>
+      <div class="score-card-status">Major gaps</div>
+    </div>
+    <div class="score-card sc-major">
+      <div class="score-card-dim">Database</div>
+      <div class="score-card-num-row"><span class="score-card-num">5</span><span class="score-card-denom">/10</span></div>
+      <div class="score-card-bar"><div class="score-card-fill" style="width:50%"></div></div>
+      <div class="score-card-status">Major gaps</div>
+    </div>
+    <div class="score-card sc-major">
+      <div class="score-card-dim">CORS / Headers</div>
+      <div class="score-card-num-row"><span class="score-card-num">6</span><span class="score-card-denom">/10</span></div>
+      <div class="score-card-bar"><div class="score-card-fill" style="width:60%"></div></div>
+      <div class="score-card-status">Major gaps</div>
+    </div>
+    <div class="score-card sc-major">
+      <div class="score-card-dim">Reliability</div>
+      <div class="score-card-num-row"><span class="score-card-num">6</span><span class="score-card-denom">/10</span></div>
+      <div class="score-card-bar"><div class="score-card-fill" style="width:60%"></div></div>
+      <div class="score-card-status">Major gaps</div>
+    </div>
+    <div class="score-card sc-minor">
+      <div class="score-card-dim">K8s Config</div>
+      <div class="score-card-num-row"><span class="score-card-num">7</span><span class="score-card-denom">/10</span></div>
+      <div class="score-card-bar"><div class="score-card-fill" style="width:70%"></div></div>
+      <div class="score-card-status">Minor gaps</div>
+    </div>
+  </div>
+
+  <!-- Immediate actions -->
+  <div class="section">
+    <div class="section-header">
+      <h2>Fix before production — priority order</h2>
+      <span class="section-count">10 items</span>
+    </div>
+    <div class="action-list">
+
+      <div class="action-item">
+        <span class="action-num">01</span>
+        <div class="action-body">
+          <div class="action-title">Rotate all exposed credentials</div>
+          <div class="action-desc">Google OAuth client secret, Azure AD client secret, and OpenAI API key are stored in <code>.env</code> which is in git history. Rotate them in their respective consoles now, then purge <code>.env</code> from git history with <code>git filter-repo --path .env --invert-paths</code>.</div>
+        </div>
+        <span class="action-sev"><span class="finding-sev sev-crit">Critical</span></span>
+      </div>
+
+      <div class="action-item">
+        <span class="action-num">02</span>
+        <div class="action-body">
+          <div class="action-title">Enable TLS / HTTPS end-to-end</div>
+          <div class="action-desc">The K8s ingress has TLS commented out. Nginx serves HTTP only on port 80. Install <code>cert-manager</code>, uncomment the TLS block in <code>k8s/ingress.yaml</code>, and add HSTS header in <code>docker/nginx/nginx.conf</code>.</div>
+        </div>
+        <span class="action-sev"><span class="finding-sev sev-crit">Critical</span></span>
+      </div>
+
+      <div class="action-item">
+        <span class="action-num">03</span>
+        <div class="action-body">
+          <div class="action-title">Fix Kafka consumer — manual offset commit + dead-letter queue</div>
+          <div class="action-desc">All four query services use <code>enable_auto_commit=True</code> and log projection failures silently. A failed event is committed and lost forever. Switch to manual commit, commit only after successful projection, and publish failures to a <code>*.dlq</code> topic for replay.</div>
+        </div>
+        <span class="action-sev"><span class="finding-sev sev-crit">Critical</span></span>
+      </div>
+
+      <div class="action-item">
+        <span class="action-num">04</span>
+        <div class="action-body">
+          <div class="action-title">Implement a PostgreSQL backup strategy</div>
+          <div class="action-desc">The 50Gi <code>postgres</code> PVC has zero backup configuration. A node failure or accidental PVC deletion is unrecoverable. Set up pgBackRest WAL archival to S3/GCS, or switch to a managed database (RDS, Cloud SQL, Azure Database for PostgreSQL).</div>
+        </div>
+        <span class="action-sev"><span class="finding-sev sev-crit">Critical</span></span>
+      </div>
+
+      <div class="action-item">
+        <span class="action-num">05</span>
+        <div class="action-body">
+          <div class="action-title">Add Prometheus metrics to all services</div>
+          <div class="action-desc">No service exposes metrics. There is no visibility into request rates, error rates, Kafka consumer lag, or database pool exhaustion. Add <code>prometheus-fastapi-instrumentator</code> to every service and <code>ServiceMonitor</code> CRDs for scraping.</div>
+        </div>
+        <span class="action-sev"><span class="finding-sev sev-major">Major</span></span>
+      </div>
+
+      <div class="action-item">
+        <span class="action-num">06</span>
+        <div class="action-body">
+          <div class="action-title">Wrap Kafka producer send in try/except</div>
+          <div class="action-desc"><code>send_and_wait()</code> in all command services has no error handling. If the Kafka broker is temporarily unreachable, the HTTP request hangs until timeout with no meaningful error response to the client. Wrap in try/except and return a <code>503</code> with a Retry-After header.</div>
+        </div>
+        <span class="action-sev"><span class="finding-sev sev-major">Major</span></span>
+      </div>
+
+      <div class="action-item">
+        <span class="action-num">07</span>
+        <div class="action-body">
+          <div class="action-title">Add missing database pool parameters to all microservices</div>
+          <div class="action-desc">The four CQRS service databases (<code>chat-command</code>, <code>chat-query</code>, <code>plot-command</code>, <code>plot-query</code>) are missing <code>pool_timeout=30</code> and <code>pool_recycle=1800</code> on their <code>create_async_engine()</code> calls. Without <code>pool_recycle</code>, connections become stale after server-side timeouts and cause <em>"server has closed the connection"</em> errors.</div>
+        </div>
+        <span class="action-sev"><span class="finding-sev sev-major">Major</span></span>
+      </div>
+
+      <div class="action-item">
+        <span class="action-num">08</span>
+        <div class="action-body">
+          <div class="action-title">Add PodDisruptionBudgets and pod anti-affinity</div>
+          <div class="action-desc">No PDBs exist, so a node drain during a K8s upgrade can evict all replicas simultaneously. No anti-affinity rules means multiple replicas of the same deployment can land on the same node. Add <code>minAvailable: 2</code> PDBs and <code>preferredDuringSchedulingIgnoredDuringExecution</code> anti-affinity to all deployments.</div>
+        </div>
+        <span class="action-sev"><span class="finding-sev sev-major">Major</span></span>
+      </div>
+
+      <div class="action-item">
+        <span class="action-num">09</span>
+        <div class="action-body">
+          <div class="action-title">Scale Zookeeper to 3 replicas</div>
+          <div class="action-desc">Zookeeper runs as a single pod. If it restarts, Kafka loses its coordination layer and all 5 microservices stop producing and consuming events. A Zookeeper quorum requires an odd number of nodes ≥ 3.</div>
+        </div>
+        <span class="action-sev"><span class="finding-sev sev-major">Major</span></span>
+      </div>
+
+      <div class="action-item">
+        <span class="action-num">10</span>
+        <div class="action-body">
+          <div class="action-title">Enable PostgreSQL SSL in connection strings</div>
+          <div class="action-desc">No service requires SSL in its <code>DATABASE_URL</code>. Credentials and data travel unencrypted between the application pods and the database. Append <code>?ssl=require</code> to all connection strings and configure the PostgreSQL container to accept only SSL connections.</div>
+        </div>
+        <span class="action-sev"><span class="finding-sev sev-major">Major</span></span>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="divider"></div>
+
+  <!-- Full findings by dimension -->
+  <div class="section">
+    <div class="section-header">
+      <h2>Full findings by dimension</h2>
+    </div>
+
+    <!-- Security -->
+    <details>
+      <summary>
+        <span class="finding-sev sev-crit">4/10</span>
+        Security
+        <span class="summary-arrow">▶</span>
+      </summary>
+      <div class="details-body">
+        <div class="finding finding-crit">
+          <div class="finding-head"><span class="finding-sev sev-crit">Critical</span><span class="finding-title">Microservices trust the gateway — no auth on internal ports</span></div>
+          <div class="finding-desc">The API Gateway validates JWT, but the four downstream services (<code>chat-command</code>, <code>chat-query</code>, <code>plot-command</code>, <code>plot-query</code>) have zero authentication middleware. If a pod in the cluster can reach <code>chat-command:8001</code> directly, it bypasses all security controls.</div>
+          <div class="finding-action">Add a lightweight JWT validation middleware to each microservice, or enforce mTLS via a service mesh.</div>
+        </div>
+        <div class="finding finding-crit">
+          <div class="finding-head"><span class="finding-sev sev-crit">Critical</span><span class="finding-title">Weak default SECRET_KEY values</span></div>
+          <div class="finding-desc"><code>backend/app/config/auth_config.py</code> defaults to <code>"change-me-to-a-random-string"</code>. <code>services/api-gateway/app/config.py</code> defaults to <code>"change-me"</code>. If either is deployed without override, JWTs can be forged.</div>
+          <div class="finding-action">Remove the default entirely — use <code>...</code> (Pydantic required) so startup fails loudly if the env var is missing.</div>
+        </div>
+        <div class="finding finding-major">
+          <div class="finding-head"><span class="finding-sev sev-major">Major</span><span class="finding-title">No Content-Security-Policy header</span></div>
+          <div class="finding-desc"><code>docker/nginx/nginx.conf</code> sets X-Frame-Options and X-XSS-Protection but has no CSP, leaving the Next.js frontend vulnerable to injected scripts.</div>
+          <div class="finding-action">Add <code>Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline'; ...</code> to Nginx.</div>
+        </div>
+        <div class="finding finding-major">
+          <div class="finding-head"><span class="finding-sev sev-major">Major</span><span class="finding-title">CORS allows all methods and all headers</span></div>
+          <div class="finding-desc"><code>backend/app/main.py</code> sets <code>allow_methods=["*"]</code> and <code>allow_headers=["*"]</code>. This permits TRACE requests and any arbitrary header.</div>
+          <div class="finding-action">Restrict to <code>["GET","POST","PUT","PATCH","DELETE","OPTIONS"]</code> and enumerate specific headers.</div>
+        </div>
+        <div class="finding finding-minor">
+          <div class="finding-head"><span class="finding-sev sev-minor">Minor</span><span class="finding-title">Swagger UI reachable without auth in debug mode</span></div>
+          <div class="finding-desc">The API Gateway disables Swagger in prod when <code>DEBUG=False</code>, but verify this setting is actually <code>False</code> in the K8s ConfigMap before deploying.</div>
+        </div>
+        <div class="finding finding-good">
+          <div class="finding-head"><span class="finding-sev sev-good">Good</span><span class="finding-title">Rate limiting: two-tier Redis-based middleware</span></div>
+          <div class="finding-desc">Global 300 req/min per IP on all <code>/api/*</code> endpoints plus endpoint-specific limits (login 5/min, register 3/min). Gracefully degrades when Redis is unavailable.</div>
+        </div>
+        <div class="finding finding-good">
+          <div class="finding-head"><span class="finding-sev sev-good">Good</span><span class="finding-title">JWT stored in httpOnly cookies</span></div>
+          <div class="finding-desc">Tokens are not accessible via JavaScript — XSS cannot steal them directly.</div>
+        </div>
+      </div>
+    </details>
+
+    <!-- Observability -->
+    <details>
+      <summary>
+        <span class="finding-sev sev-major">5/10</span>
+        Observability
+        <span class="summary-arrow">▶</span>
+      </summary>
+      <div class="details-body">
+        <div class="finding finding-crit">
+          <div class="finding-head"><span class="finding-sev sev-crit">Critical</span><span class="finding-title">No metrics — Prometheus, OpenTelemetry, or otherwise</span></div>
+          <div class="finding-desc">Zero visibility into request rates, p99 latencies, error rates, Kafka consumer lag, or database pool saturation. You cannot alert on what you cannot measure.</div>
+          <div class="finding-action">Add <code>prometheus-fastapi-instrumentator</code> to all 5 services + the monolith. Add a <code>/metrics</code> endpoint. Deploy Prometheus + Grafana. Create <code>ServiceMonitor</code> CRDs.</div>
+        </div>
+        <div class="finding finding-major">
+          <div class="finding-head"><span class="finding-sev sev-major">Major</span><span class="finding-title">No distributed tracing across microservices</span></div>
+          <div class="finding-desc">Each service has a <code>request_id</code> header, but this ID is not propagated through Kafka messages or forwarded in downstream HTTP calls. There is no way to trace a single user action across api-gateway → command → query.</div>
+          <div class="finding-action">Adopt OpenTelemetry with the <code>opentelemetry-instrumentation-fastapi</code> and <code>opentelemetry-instrumentation-sqlalchemy</code> packages. Export spans to Jaeger or Tempo.</div>
+        </div>
+        <div class="finding finding-major">
+          <div class="finding-head"><span class="finding-sev sev-major">Major</span><span class="finding-title">Microservice health endpoints don't check dependencies</span></div>
+          <div class="finding-desc">All four CQRS services return <code>{"status": "ok"}</code> unconditionally. A pod can be marked <em>Ready</em> by K8s while its Kafka consumer is stopped or its database connection is broken.</div>
+          <div class="finding-action">Add a real readiness check: verify DB connectivity with a <code>SELECT 1</code> and verify the Kafka consumer task is running before returning 200.</div>
+        </div>
+        <div class="finding finding-good">
+          <div class="finding-head"><span class="finding-sev sev-good">Good</span><span class="finding-title">Structured JSON logging with structlog</span></div>
+          <div class="finding-desc">All log output is structured JSON with <code>request_id</code> context injection, rotating file handlers, and a separate error log. Ready for a log aggregation pipeline (Loki, CloudWatch, Datadog).</div>
+        </div>
+        <div class="finding finding-good">
+          <div class="finding-head"><span class="finding-sev sev-good">Good</span><span class="finding-title">Monolith has a proper readiness endpoint</span></div>
+          <div class="finding-desc"><code>/health/ready</code> issues a live <code>SELECT 1</code> to PostgreSQL and a <code>PING</code> to Redis before returning 200. This is the right pattern.</div>
+        </div>
+      </div>
+    </details>
+
+    <!-- Reliability -->
+    <details>
+      <summary>
+        <span class="finding-sev sev-major">6/10</span>
+        Reliability
+        <span class="summary-arrow">▶</span>
+      </summary>
+      <div class="details-body">
+        <div class="finding finding-major">
+          <div class="finding-head"><span class="finding-sev sev-major">Major</span><span class="finding-title">No circuit breaker for gateway → downstream calls</span></div>
+          <div class="finding-desc">The API Gateway uses <code>httpx.AsyncClient</code> with timeouts, but if all replicas of <code>chat-command</code> are slow, the gateway queues requests until its own connection pool exhausts, cascading the failure.</div>
+          <div class="finding-action">Add <code>pybreaker</code> or implement a simple exponential-backoff retry with a max of 2 retries and a fast-fail circuit state after 5 consecutive failures.</div>
+        </div>
+        <div class="finding finding-major">
+          <div class="finding-head"><span class="finding-sev sev-major">Major</span><span class="finding-title">Missing pool_timeout and pool_recycle on all 4 CQRS databases</span></div>
+          <div class="finding-desc">The monolith sets <code>pool_recycle=1800</code> to prevent stale connections, but none of the four microservice databases do. After 30 minutes of inactivity the pool returns dead connections and the service throws errors until recycled.</div>
+          <div class="finding-action">Add <code>pool_timeout=30, pool_recycle=1800</code> to every <code>create_async_engine()</code> call in the microservices.</div>
+        </div>
+        <div class="finding finding-minor">
+          <div class="finding-head"><span class="finding-sev sev-minor">Minor</span><span class="finding-title">No terminationGracePeriodSeconds or preStop hooks</span></div>
+          <div class="finding-desc">Pods are killed immediately on SIGTERM. Kafka consumers may be mid-batch when the pod terminates, causing uncommitted offsets to be reprocessed by the next pod (minor duplication risk).</div>
+          <div class="finding-action">Add <code>terminationGracePeriodSeconds: 60</code> and a <code>preStop: exec: sleep 15</code> hook to all consumer deployments to drain in-flight requests.</div>
+        </div>
+        <div class="finding finding-good">
+          <div class="finding-head"><span class="finding-sev sev-good">Good</span><span class="finding-title">Kafka producer idempotence enabled</span></div>
+          <div class="finding-desc"><code>enable_idempotence=True</code> is set on all producers. Combined with <code>acks="all"</code>, this guarantees exactly-once delivery per partition even on producer retry.</div>
+        </div>
+        <div class="finding finding-good">
+          <div class="finding-head"><span class="finding-sev sev-good">Good</span><span class="finding-title">Graceful consumer shutdown in lifespan</span></div>
+          <div class="finding-desc">Consumer tasks are cancelled and awaited in the FastAPI lifespan context manager. The consumer loop has a try/finally that stops the Kafka consumer cleanly.</div>
+        </div>
+      </div>
+    </details>
+
+    <!-- K8s -->
+    <details>
+      <summary>
+        <span class="finding-sev sev-minor">7/10</span>
+        Kubernetes Configuration
+        <span class="summary-arrow">▶</span>
+      </summary>
+      <div class="details-body">
+        <div class="finding finding-major">
+          <div class="finding-head"><span class="finding-sev sev-major">Major</span><span class="finding-title">No PodDisruptionBudgets</span></div>
+          <div class="finding-desc">During node drain, K8s may evict all replicas of a service simultaneously. With 3 replicas and no PDB, a <code>kubectl drain</code> can take all 3 down at once.</div>
+          <div class="finding-action">Create a PDB for each deployment with <code>minAvailable: 2</code>.</div>
+        </div>
+        <div class="finding finding-major">
+          <div class="finding-head"><span class="finding-sev sev-major">Major</span><span class="finding-title">Single Zookeeper replica</span></div>
+          <div class="finding-desc">Zookeeper coordinates Kafka broker elections. One pod means any restart halts Kafka operations across all 5 microservices until it recovers.</div>
+          <div class="finding-action">Scale Zookeeper to 3 replicas. Zookeeper requires an odd quorum number to elect a leader.</div>
+        </div>
+        <div class="finding finding-minor">
+          <div class="finding-head"><span class="finding-sev sev-minor">Minor</span><span class="finding-title">No pod anti-affinity rules</span></div>
+          <div class="finding-desc">Replicas of the same deployment can schedule on the same node. A node failure eliminates all replicas of a service simultaneously.</div>
+          <div class="finding-action">Add <code>preferredDuringSchedulingIgnoredDuringExecution</code> anti-affinity keyed on <code>app</code> label to spread replicas across nodes.</div>
+        </div>
+        <div class="finding finding-minor">
+          <div class="finding-head"><span class="finding-sev sev-minor">Minor</span><span class="finding-title">No rolling update strategy specified</span></div>
+          <div class="finding-desc">Deployments use the default 25% maxSurge / 25% maxUnavailable. For command services handling writes, even one unavailable pod during a deploy is risky during peak traffic.</div>
+          <div class="finding-action">Set <code>maxUnavailable: 0, maxSurge: 1</code> on all write-side deployments to ensure zero-downtime rollouts.</div>
+        </div>
+        <div class="finding finding-good">
+          <div class="finding-head"><span class="finding-sev sev-good">Good</span><span class="finding-title">Resource requests and limits set on all pods</span></div>
+          <div class="finding-desc">Every deployment and StatefulSet has CPU/memory requests and limits. The K8s scheduler can bin-pack correctly, and rogue processes can't consume unbounded resources.</div>
+        </div>
+        <div class="finding finding-good">
+          <div class="finding-head"><span class="finding-sev sev-good">Good</span><span class="finding-title">HPA configured with CPU + memory thresholds</span></div>
+          <div class="finding-desc">All 5 microservices have HPAs (min 3 → max 20-30 replicas) triggered at 60–70% CPU and 75–80% memory. Scales out ahead of saturation.</div>
+        </div>
+        <div class="finding finding-good">
+          <div class="finding-head"><span class="finding-sev sev-good">Good</span><span class="finding-title">Kafka broker replicas: RF=3, minInSync=2</span></div>
+          <div class="finding-desc">Kafka topic replication factor 3 with <code>min.insync.replicas=2</code> means the cluster tolerates one broker failure without data loss or producer stall.</div>
+        </div>
+      </div>
+    </details>
+
+    <!-- Error Handling -->
+    <details>
+      <summary>
+        <span class="finding-sev sev-major">5/10</span>
+        Error Handling
+        <span class="summary-arrow">▶</span>
+      </summary>
+      <div class="details-body">
+        <div class="finding finding-crit">
+          <div class="finding-head"><span class="finding-sev sev-crit">Critical</span><span class="finding-title">Kafka consumer silently commits failed projection events</span></div>
+          <div class="finding-desc">With <code>enable_auto_commit=True</code>, a projection that throws an exception has its offset committed by the broker on the next poll cycle. The event is lost — the query model never reflects the command.</div>
+          <div class="finding-action">Switch to <code>enable_auto_commit=False</code>. Call <code>await consumer.commit()</code> only after a successful projection. On repeated failure, produce to a <code>*.dlq</code> dead-letter topic.</div>
+        </div>
+        <div class="finding finding-major">
+          <div class="finding-head"><span class="finding-sev sev-major">Major</span><span class="finding-title">Kafka producer send_and_wait() is unguarded</span></div>
+          <div class="finding-desc">Command services call <code>await _producer.send_and_wait(...)</code> with no try/except. A transient Kafka timeout surfaces as an unhandled exception, returning a 500 with a raw traceback to the client.</div>
+          <div class="finding-action">Wrap in try/except, return <code>503 Service Unavailable</code> with a <code>Retry-After: 5</code> header when Kafka is temporarily unreachable.</div>
+        </div>
+        <div class="finding finding-good">
+          <div class="finding-head"><span class="finding-sev sev-good">Good</span><span class="finding-title">Consistent exception hierarchy with HTTP status mapping</span></div>
+          <div class="finding-desc"><code>backend/app/common/exceptions.py</code> defines <code>NotFoundException</code>, <code>ForbiddenException</code>, <code>ConflictException</code>, etc. — all mapped to correct HTTP status codes via a registered exception handler. API errors are always structured JSON.</div>
+        </div>
+        <div class="finding finding-good">
+          <div class="finding-head"><span class="finding-sev sev-good">Good</span><span class="finding-title">Database sessions roll back on exception</span></div>
+          <div class="finding-desc">All async session context managers in all services call <code>await session.rollback()</code> in the except block, preventing partial writes from being committed on error.</div>
+        </div>
+      </div>
+    </details>
+
+    <!-- Database -->
+    <details>
+      <summary>
+        <span class="finding-sev sev-major">5/10</span>
+        Database
+        <span class="summary-arrow">▶</span>
+      </summary>
+      <div class="details-body">
+        <div class="finding finding-crit">
+          <div class="finding-head"><span class="finding-sev sev-crit">Critical</span><span class="finding-title">No backup strategy — a single volume deletion is unrecoverable</span></div>
+          <div class="finding-desc">The 50Gi PVC backing PostgreSQL has no snapshot schedule, no WAL archival, and no restore procedure documented. Accidental deletion or storage failure means total data loss.</div>
+          <div class="finding-action">Deploy pgBackRest with continuous WAL archival to S3/GCS. Schedule daily base backups. Test restore monthly. Or migrate to a managed database (RDS, Cloud SQL).</div>
+        </div>
+        <div class="finding finding-major">
+          <div class="finding-head"><span class="finding-sev sev-major">Major</span><span class="finding-title">No high-availability — single Postgres instance</span></div>
+          <div class="finding-desc">A pod crash takes the database down for all 7 services (monolith + 5 microservices) until Kubernetes reschedules it and the storage re-attaches. StatefulSet reschedule can take 2–5 minutes.</div>
+          <div class="finding-action">Deploy Patroni for Postgres HA (3 nodes), or move to a managed service with automatic failover. Query services should use a read replica.</div>
+        </div>
+        <div class="finding finding-major">
+          <div class="finding-head"><span class="finding-sev sev-major">Major</span><span class="finding-title">Database connections unencrypted in transit</span></div>
+          <div class="finding-desc">No <code>?ssl=require</code> in any <code>DATABASE_URL</code>. Credentials and query data travel in plaintext between app pods and the database within the cluster.</div>
+          <div class="finding-action">Append <code>?ssl=require</code> to all connection strings. Enable <code>ssl = on</code> in <code>postgresql.conf</code> and provision a TLS certificate for the Postgres pod.</div>
+        </div>
+        <div class="finding finding-good">
+          <div class="finding-head"><span class="finding-sev sev-good">Good</span><span class="finding-title">Connection pooling properly sized on the monolith</span></div>
+          <div class="finding-desc"><code>pool_size=20, max_overflow=10, pool_timeout=30, pool_recycle=1800</code> — correct values preventing both starvation and connection exhaustion.</div>
+        </div>
+        <div class="finding finding-good">
+          <div class="finding-head"><span class="finding-sev sev-good">Good</span><span class="finding-title">pgvector extension available for AI features</span></div>
+          <div class="finding-desc">The <code>pgvector/pgvector:pg16</code> image is used in all three stacks and in CI — vector similarity search is supported out of the box and tested in the pipeline.</div>
+        </div>
+      </div>
+    </details>
+
+    <!-- Secrets -->
+    <details>
+      <summary>
+        <span class="finding-sev sev-crit">2/10</span>
+        Secrets Management
+        <span class="summary-arrow">▶</span>
+      </summary>
+      <div class="details-body">
+        <div class="finding finding-crit">
+          <div class="finding-head"><span class="finding-sev sev-crit">Critical</span><span class="finding-title">Live production credentials committed to git history</span></div>
+          <div class="finding-desc">Google OAuth, Azure AD, and OpenAI credentials exist in <code>.env</code> in the repository's git history. Even after deletion from the working tree, they remain in every clone of the repo until history is rewritten.</div>
+          <div class="finding-action">1. Rotate all credentials now. 2. Run <code>git filter-repo --path .env --invert-paths</code>. 3. Force-push all branches. 4. Notify all collaborators to re-clone.</div>
+        </div>
+        <div class="finding finding-major">
+          <div class="finding-head"><span class="finding-sev sev-major">Major</span><span class="finding-title">K8s Secrets stored as base64, not encrypted</span></div>
+          <div class="finding-desc"><code>k8s/secrets.yaml</code> uses base64 encoding, which is not encryption. Anyone with <code>kubectl get secret</code> access can decode the values instantly. If etcd is not configured with encryption at rest, the secrets are plaintext on disk.</div>
+          <div class="finding-action">Enable KMS encryption for etcd (cloud providers offer this natively). Consider sealed-secrets or External Secrets Operator pulling from Vault/AWS Secrets Manager.</div>
+        </div>
+        <div class="finding finding-minor">
+          <div class="finding-head"><span class="finding-sev sev-minor">Minor</span><span class="finding-title">No JWT secret rotation mechanism</span></div>
+          <div class="finding-desc">Rotating <code>SECRET_KEY</code> immediately invalidates all active sessions. There is no dual-key signing window to allow graceful rotation.</div>
+          <div class="finding-action">Implement a <code>PREVIOUS_SECRET_KEY</code> that the token validator falls back to. This allows a rotation window during which existing sessions remain valid.</div>
+        </div>
+        <div class="finding finding-good">
+          <div class="finding-head"><span class="finding-sev sev-good">Good</span><span class="finding-title">.env excluded from git via .gitignore</span></div>
+          <div class="finding-desc"><code>.gitignore</code> correctly excludes <code>.env</code> and <code>.env.*</code>. The issue is a historical commit, not an ongoing one.</div>
+        </div>
+        <div class="finding finding-good">
+          <div class="finding-head"><span class="finding-sev sev-good">Good</span><span class="finding-title">K8s deployments use secretKeyRef — secrets not in ConfigMap</span></div>
+          <div class="finding-desc">Deployment manifests inject secrets via <code>valueFrom.secretKeyRef</code>, not hard-coded in <code>configmap.yaml</code>. The correct K8s pattern is in place — just needs the encryption layer underneath.</div>
+        </div>
+      </div>
+    </details>
+
+  </div><!-- /findings section -->
+
+  <div class="divider"></div>
+
+  <!-- What works -->
+  <div class="section">
+    <div class="section-header">
+      <h2>What's already production-grade</h2>
+    </div>
+    <div class="positives">
+      <div class="positives-title">Strengths</div>
+      <div class="positive-list">
+        <div class="positive-item">CQRS event sourcing with Kafka — write and read models separated with proper Kafka topics and consumer groups</div>
+        <div class="positive-item">Idempotent Kafka producers with <code>acks="all"</code> — strongest durability guarantee without a distributed transaction</div>
+        <div class="positive-item">Async SQLAlchemy 2.0 throughout — non-blocking I/O end to end, proper session lifecycle management</div>
+        <div class="positive-item">Horizontal Pod Autoscalers on all 5 services — CPU + memory triggers, sensible min/max replica counts</div>
+        <div class="positive-item">Resource requests and limits on every K8s workload — scheduler can bin-pack correctly, no unbounded resource usage</div>
+        <div class="positive-item">Kafka RF=3 with minInSync=2 — tolerates one broker failure without data loss</div>
+        <div class="positive-item">Structured JSON logging with request ID context — ready for log aggregation with no changes</div>
+        <div class="positive-item">Multi-stage Docker builds — frontend compiled to standalone bundle, Python venv pre-built, minimal runtime image</div>
+        <div class="positive-item">Two-tier Redis rate limiting — per-IP global cap and per-endpoint auth limits with graceful Redis fallback</div>
+        <div class="positive-item">JWT in httpOnly cookies — XSS cannot steal tokens directly</div>
+        <div class="positive-item">Alembic for monolith schema migrations — tracked, reversible, CI-verified</div>
+        <div class="positive-item">Concurrency control on GitHub Actions — cancel-in-progress CI on PRs, ordered CD deploys</div>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /page -->
+
+<script>
+  // Animate score bars on load
+  document.querySelectorAll('.score-card-fill').forEach(el => {
+    const w = el.style.width;
+    el.style.width = '0%';
+    requestAnimationFrame(() => {
+      el.style.transition = 'width .6s cubic-bezier(.4,0,.2,1)';
+      el.style.width = w;
+    });
+  });
+</script>
