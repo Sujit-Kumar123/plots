@@ -24,6 +24,16 @@ async def proxy(request: Request, base_url: str, path: str) -> Response:
     }
     if hasattr(request.state, "user_id") and request.state.user_id:
         headers["x-user-id"] = str(request.state.user_id)
+    if hasattr(request.state, "user_payload") and request.state.user_payload:
+        payload = request.state.user_payload
+        if "role" in payload:
+            headers["x-user-role"] = str(payload["role"])
+        if "email" in payload:
+            headers["x-user-email"] = str(payload["email"])
+    if hasattr(request.state, "request_id"):
+        headers["x-request-id"] = request.state.request_id
+    if settings.internal_service_secret:
+        headers["x-internal-secret"] = settings.internal_service_secret
 
     last_exc: Exception | None = None
     for attempt in range(1, settings.proxy_max_retries + 1):

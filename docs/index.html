@@ -290,7 +290,7 @@ td:first-child{color:var(--text-bright)}
   </div>
 
   <div class="nav-group">
-    <span class="nav-group-label">Monolith Backend</span>
+    <span class="nav-group-label">Backend Services</span>
     <a href="#auth"          class="nav-link"><span class="dot dot-none"></span>Authentication</a>
     <a href="#plot-sheets"   class="nav-link"><span class="dot dot-none"></span>Plot Sheets</a>
     <a href="#notifications" class="nav-link"><span class="dot dot-none"></span>Notifications</a>
@@ -298,7 +298,6 @@ td:first-child{color:var(--text-bright)}
     <a href="#payments"      class="nav-link"><span class="dot dot-none"></span>Payments</a>
     <a href="#audit"         class="nav-link"><span class="dot dot-none"></span>Audit</a>
     <a href="#admin"         class="nav-link"><span class="dot dot-none"></span>Admin</a>
-    <a href="#worker"        class="nav-link"><span class="dot dot-none"></span>Celery Worker</a>
   </div>
 
   <div class="nav-group">
@@ -309,10 +308,8 @@ td:first-child{color:var(--text-bright)}
   <div class="nav-group">
     <span class="nav-group-label">CQRS Microservices</span>
     <a href="#svc-gateway"   class="nav-link"><span class="dot dot-gw"></span>API Gateway</a>
-    <a href="#svc-chat-cmd"  class="nav-link"><span class="dot dot-write"></span>Chat Command</a>
-    <a href="#svc-chat-qry"  class="nav-link"><span class="dot dot-read"></span>Chat Query</a>
-    <a href="#svc-plot-cmd"  class="nav-link"><span class="dot dot-write"></span>Plot Command</a>
-    <a href="#svc-plot-qry"  class="nav-link"><span class="dot dot-read"></span>Plot Query</a>
+    <a href="#svc-chat"      class="nav-link"><span class="dot dot-write"></span>Chat Service</a>
+    <a href="#svc-plot"      class="nav-link"><span class="dot dot-write"></span>Plot Service</a>
   </div>
 
   <div class="nav-group">
@@ -349,7 +346,7 @@ td:first-child{color:var(--text-bright)}
 <!-- ── ARCHITECTURE ──────────────────────────────────── -->
 <section class="doc-section" id="architecture">
   <h2>Architecture</h2>
-  <p>The system is split into two deployment tiers: a <strong>monolith</strong> (single Docker container handling auth, admin, payments, uploads, notifications) and a <strong>CQRS microservices layer</strong> dedicated to high-throughput chat and plot operations.</p>
+  <p>Six independent microservices share a single PostgreSQL instance but own separate schemas. The <strong>API Gateway</strong> handles JWT validation, audit logging, and reverse-proxying. The <strong>CQRS layer</strong> (chat-service, plot-service) runs Kafka producer and consumer in the same process — no separate command/query split.</p>
 
   <div class="arch-wrap">
     <svg viewBox="0 0 860 470" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="CQRS Architecture Diagram">
@@ -359,9 +356,6 @@ td:first-child{color:var(--text-bright)}
         </marker>
         <marker id="ab" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
           <path d="M0,0 L7,3.5 L0,7 Z" fill="#2563EB"/>
-        </marker>
-        <marker id="at" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
-          <path d="M0,0 L7,3.5 L0,7 Z" fill="#0D9488"/>
         </marker>
         <marker id="ak" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
           <path d="M0,0 L7,3.5 L0,7 Z" fill="#C2872B"/>
@@ -382,57 +376,38 @@ td:first-child{color:var(--text-bright)}
       <!-- API Gateway -->
       <rect x="40" y="96" width="780" height="54" rx="6" fill="#1C2840" stroke="#7C3AED" stroke-width="1.5"/>
       <text x="430" y="119" text-anchor="middle" fill="#E2EAF4" font-size="11.5" font-family="Trebuchet MS,system-ui,sans-serif" font-weight="700">API Gateway  :8000</text>
-      <text x="430" y="137" text-anchor="middle" fill="#a78bfa" font-size="9.5" font-family="ui-monospace,Courier New,monospace">JWT validation · route splitting (write → command, read → query)</text>
-
-      <!-- WRITE / READ labels -->
-      <text x="212" y="164" text-anchor="middle" fill="#60a5fa" font-size="9" font-family="Trebuchet MS,system-ui,sans-serif" font-weight="700" letter-spacing="1.5">WRITE SIDE</text>
-      <text x="648" y="164" text-anchor="middle" fill="#2dd4bf" font-size="9" font-family="Trebuchet MS,system-ui,sans-serif" font-weight="700" letter-spacing="1.5">READ SIDE</text>
-
-      <!-- vertical divider -->
-      <line x1="430" y1="157" x2="430" y2="262" stroke="#1E3050" stroke-width="1" stroke-dasharray="4,3"/>
+      <text x="430" y="137" text-anchor="middle" fill="#a78bfa" font-size="9.5" font-family="ui-monospace,Courier New,monospace">JWT validation · audit logging · reverse-proxy to microservices</text>
 
       <!-- Arrows: Gateway→services -->
-      <line x1="135" y1="150" x2="135" y2="172" stroke="#2563EB" stroke-width="1.5" marker-end="url(#ab)"/>
-      <line x1="322" y1="150" x2="322" y2="172" stroke="#2563EB" stroke-width="1.5" marker-end="url(#ab)"/>
-      <line x1="538" y1="150" x2="538" y2="172" stroke="#0D9488" stroke-width="1.5" marker-end="url(#at)"/>
-      <line x1="725" y1="150" x2="725" y2="172" stroke="#0D9488" stroke-width="1.5" marker-end="url(#at)"/>
+      <line x1="212" y1="150" x2="212" y2="172" stroke="#2563EB" stroke-width="1.5" marker-end="url(#ab)"/>
+      <line x1="648" y1="150" x2="648" y2="172" stroke="#2563EB" stroke-width="1.5" marker-end="url(#ab)"/>
 
-      <!-- chat-command -->
-      <rect x="45" y="172" width="180" height="54" rx="6" fill="#172032" stroke="#2563EB" stroke-width="1.5"/>
-      <text x="135" y="196" text-anchor="middle" fill="#E2EAF4" font-size="10.5" font-family="Trebuchet MS,system-ui,sans-serif" font-weight="600">chat-command</text>
-      <text x="135" y="213" text-anchor="middle" fill="#60a5fa" font-size="9" font-family="ui-monospace,Courier New,monospace">:8001  POST/DELETE</text>
+      <!-- chat-service (unified) -->
+      <rect x="45" y="172" width="334" height="54" rx="6" fill="#172032" stroke="#2563EB" stroke-width="1.5"/>
+      <text x="212" y="196" text-anchor="middle" fill="#E2EAF4" font-size="10.5" font-family="Trebuchet MS,system-ui,sans-serif" font-weight="600">chat-service</text>
+      <text x="212" y="213" text-anchor="middle" fill="#60a5fa" font-size="9" font-family="ui-monospace,Courier New,monospace">:8001  producer + consumer  ·  chat_write / chat_read</text>
 
-      <!-- plot-command -->
-      <rect x="235" y="172" width="180" height="54" rx="6" fill="#172032" stroke="#2563EB" stroke-width="1.5"/>
-      <text x="325" y="196" text-anchor="middle" fill="#E2EAF4" font-size="10.5" font-family="Trebuchet MS,system-ui,sans-serif" font-weight="600">plot-command</text>
-      <text x="325" y="213" text-anchor="middle" fill="#60a5fa" font-size="9" font-family="ui-monospace,Courier New,monospace">:8003  POST/PUT/DELETE</text>
-
-      <!-- chat-query -->
-      <rect x="448" y="172" width="180" height="54" rx="6" fill="#172032" stroke="#0D9488" stroke-width="1.5"/>
-      <text x="538" y="196" text-anchor="middle" fill="#E2EAF4" font-size="10.5" font-family="Trebuchet MS,system-ui,sans-serif" font-weight="600">chat-query</text>
-      <text x="538" y="213" text-anchor="middle" fill="#2dd4bf" font-size="9" font-family="ui-monospace,Courier New,monospace">:8002  GET</text>
-
-      <!-- plot-query -->
-      <rect x="635" y="172" width="180" height="54" rx="6" fill="#172032" stroke="#0D9488" stroke-width="1.5"/>
-      <text x="725" y="196" text-anchor="middle" fill="#E2EAF4" font-size="10.5" font-family="Trebuchet MS,system-ui,sans-serif" font-weight="600">plot-query</text>
-      <text x="725" y="213" text-anchor="middle" fill="#2dd4bf" font-size="9" font-family="ui-monospace,Courier New,monospace">:8004  GET</text>
+      <!-- plot-service (unified) -->
+      <rect x="481" y="172" width="339" height="54" rx="6" fill="#172032" stroke="#2563EB" stroke-width="1.5"/>
+      <text x="650" y="196" text-anchor="middle" fill="#E2EAF4" font-size="10.5" font-family="Trebuchet MS,system-ui,sans-serif" font-weight="600">plot-service</text>
+      <text x="650" y="213" text-anchor="middle" fill="#60a5fa" font-size="9" font-family="ui-monospace,Courier New,monospace">:8003  producer + consumer  ·  plot_unified</text>
 
       <!-- Publish labels -->
-      <text x="72" y="270" fill="#60a5fa" font-size="8.5" font-family="Trebuchet MS,system-ui,sans-serif">publish</text>
-      <text x="258" y="270" fill="#60a5fa" font-size="8.5" font-family="Trebuchet MS,system-ui,sans-serif">publish</text>
+      <text x="175" y="267" fill="#60a5fa" font-size="8.5" font-family="Trebuchet MS,system-ui,sans-serif">publish</text>
+      <text x="613" y="267" fill="#60a5fa" font-size="8.5" font-family="Trebuchet MS,system-ui,sans-serif">publish</text>
 
-      <!-- Subscribe labels -->
-      <text x="458" y="270" fill="#C2872B" font-size="8.5" font-family="Trebuchet MS,system-ui,sans-serif">subscribe</text>
-      <text x="645" y="270" fill="#C2872B" font-size="8.5" font-family="Trebuchet MS,system-ui,sans-serif">subscribe</text>
+      <!-- Subscribe labels (dashed) -->
+      <text x="252" y="267" fill="#C2872B" font-size="8.5" font-family="Trebuchet MS,system-ui,sans-serif">subscribe</text>
+      <text x="690" y="267" fill="#C2872B" font-size="8.5" font-family="Trebuchet MS,system-ui,sans-serif">subscribe</text>
 
-      <!-- Arrows cmd→Kafka (solid blue) -->
-      <line x1="135" y1="226" x2="135" y2="304" stroke="#2563EB" stroke-width="1.5" marker-end="url(#ab)"/>
-      <line x1="325" y1="226" x2="325" y2="304" stroke="#2563EB" stroke-width="1.5" marker-end="url(#ab)"/>
+      <!-- Arrows service→Kafka (publish, solid blue) -->
+      <line x1="200" y1="226" x2="200" y2="304" stroke="#2563EB" stroke-width="1.5" marker-end="url(#ab)"/>
+      <line x1="624" y1="226" x2="624" y2="304" stroke="#2563EB" stroke-width="1.5" marker-end="url(#ab)"/>
 
-      <!-- Arrows Kafka→query (dashed amber, animated) -->
-      <line x1="538" y1="304" x2="538" y2="226" stroke="#C2872B" stroke-width="1.5" stroke-dasharray="6,4"
+      <!-- Arrows Kafka→service (subscribe, dashed amber, animated) -->
+      <line x1="224" y1="304" x2="224" y2="226" stroke="#C2872B" stroke-width="1.5" stroke-dasharray="6,4"
             marker-end="url(#ak)" style="animation:dash-flow 1.2s linear infinite"/>
-      <line x1="725" y1="304" x2="725" y2="226" stroke="#C2872B" stroke-width="1.5" stroke-dasharray="6,4"
+      <line x1="648" y1="304" x2="648" y2="226" stroke="#C2872B" stroke-width="1.5" stroke-dasharray="6,4"
             marker-end="url(#ak)" style="animation:dash-flow 1.2s linear infinite;animation-delay:.4s"/>
 
       <!-- Kafka -->
@@ -446,20 +421,20 @@ td:first-child{color:var(--text-bright)}
       <!-- PostgreSQL -->
       <rect x="40" y="402" width="780" height="54" rx="6" fill="#1C2840" stroke="#334155" stroke-width="1.5"/>
       <text x="430" y="426" text-anchor="middle" fill="#E2EAF4" font-size="11.5" font-family="Trebuchet MS,system-ui,sans-serif" font-weight="700">PostgreSQL 16 + pgVector</text>
-      <text x="430" y="444" text-anchor="middle" fill="#94a3b8" font-size="9.5" font-family="ui-monospace,Courier New,monospace">chat_write · chat_read · plot_write · plot_read · public (monolith)</text>
+      <text x="430" y="444" text-anchor="middle" fill="#94a3b8" font-size="9.5" font-family="ui-monospace,Courier New,monospace">chat_write · chat_read · plot_unified · public (auth / audit / sheets)</text>
     </svg>
   </div>
 
-  <div class="callout kafka"><strong>Amber dashed arrows</strong> represent asynchronous Kafka event consumption — the query-side projection consumers update their read models independently of the HTTP request/response cycle.</div>
+  <div class="callout kafka"><strong>Amber dashed arrows</strong> represent asynchronous Kafka event consumption — each unified service runs its own projector consumer group, keeping its read model in sync independently of the HTTP request cycle.</div>
 
   <div class="two-col">
     <div class="card">
-      <h4>Monolith</h4>
-      <p style="font-size:.83rem">Single Docker container: Nginx→FastAPI + Next.js via Supervisord. Handles auth, RBAC, admin, notifications, uploads, payments.</p>
+      <h4>Unified Services</h4>
+      <p style="font-size:.83rem">chat-service and plot-service each run both the Kafka producer (HTTP commands) and Kafka consumer projector in the same process. No separate command/query pods to coordinate.</p>
     </div>
     <div class="card">
-      <h4>CQRS Layer</h4>
-      <p style="font-size:.83rem">5 independent services. Commands write to PostgreSQL and publish Kafka events. Queries read from denormalised projections. Deployed separately on Kubernetes.</p>
+      <h4>6-Service Layout</h4>
+      <p style="font-size:.83rem">api-gateway (:8000) · auth-service (:8010) · chat-service (:8001) · plot-service (:8003) · payment-service (:8011) · notification-service (:8012). All deployed on Kubernetes.</p>
     </div>
   </div>
 </section>
@@ -559,10 +534,11 @@ td:first-child{color:var(--text-bright)}
 
 <section class="doc-section" id="notifications">
   <h2>Notifications</h2>
-  <p>Email delivery via <strong>SendGrid</strong> and SMS via <strong>Twilio</strong>. Emails use Jinja2 templates from <code>backend/app/notifications/templates/</code>. Heavy sends are offloaded to Celery.</p>
+  <p>Email delivery via <strong>SendGrid</strong> and SMS via <strong>Twilio</strong>, handled by the dedicated <strong>notification-service</strong> (:8012). Emails use Jinja2 templates with 3-attempt retry (1s/2s/4s backoff). Internal callers use <code>x-internal-secret</code> header; user-facing calls are proxied through the API Gateway. No Celery — delivery is async in-process.</p>
   <div class="endpoint-group">
-    <div class="endpoint"><span class="badge badge-post">POST</span><span class="path">/api/notifications/send-email</span><span class="desc">Send transactional email</span></div>
+    <div class="endpoint"><span class="badge badge-post">POST</span><span class="path">/api/email/send</span><span class="desc">Internal: send transactional email (x-internal-secret required)</span></div>
     <div class="endpoint"><span class="badge badge-post">POST</span><span class="path">/api/notifications/send-sms</span><span class="desc">Send SMS via Twilio</span></div>
+    <div class="endpoint"><span class="badge badge-get">GET</span><span class="path">/api/notifications</span><span class="desc">List user notifications</span></div>
   </div>
 </section>
 
@@ -600,7 +576,7 @@ td:first-child{color:var(--text-bright)}
 
 <section class="doc-section" id="audit">
   <h2>Audit Log</h2>
-  <p>All sensitive operations write an <code>AuditLog</code> record. Queryable by <code>action</code>, <code>resource_type</code>, <code>user_id</code>, and date range.</p>
+  <p>All sensitive operations write an <code>AuditLog</code> record. The <strong>api-gateway</strong> owns all audit DB operations — <code>AuditMiddleware</code> fires <code>log_action</code> asynchronously (fire-and-forget) for every authenticated request, and <code>GET /api/admin/audit</code> is served directly from the gateway's own DB connection (pool_size=5, max_overflow=10). Queryable by <code>action</code>, <code>resource_type</code>, <code>user_id</code>, and date range.</p>
   <h3>Model — <code>audit_logs</code></h3>
   <div class="table-wrap">
     <table>
@@ -633,31 +609,6 @@ td:first-child{color:var(--text-bright)}
   </div>
 </section>
 
-<section class="doc-section" id="worker">
-  <h2>Celery Worker</h2>
-  <p>Background task queue using <strong>Redis</strong> as broker and result backend. Workers are run as a separate Docker service.</p>
-  <div class="table-wrap">
-    <table>
-      <thead><tr><th>Task</th><th>Parameters</th><th>Description</th></tr></thead>
-      <tbody>
-        <tr>
-          <td><code>send_email_task</code></td>
-          <td><code>to: str</code>, <code>subject: str</code>, <code>template_name: str</code>, <code>context: dict</code></td>
-          <td>Renders a Jinja2 template and sends via SendGrid. Returns <code>{status, details}</code>.</td>
-        </tr>
-      </tbody>
-    </table>
-  </div>
-  <pre><code># Enqueue from FastAPI
-from app.worker.tasks import send_email_task
-
-send_email_task.delay(
-    to="user@example.com",
-    subject="Welcome!",
-    template_name="welcome.html",
-    context={"name": "Alice"}
-)</code></pre>
-</section>
 
 <!-- ══════════════ FRONTEND ══════════════ -->
 <section class="doc-section" id="frontend">
@@ -725,35 +676,36 @@ send_email_task.delay(
   <div class="service-card svc-gw" style="margin-bottom:1rem">
     <div class="svc-name">api-gateway</div>
     <div class="svc-port">services/api-gateway/  ·  Port 8000</div>
-    <div class="svc-desc">Validates JWT tokens, injects <code>X-User-ID</code> header, then reverse-proxies requests. <strong>Write operations</strong> (POST/PUT/DELETE) route to the respective command service. <strong>Read operations</strong> (GET) route to the respective query service.</div>
+    <div class="svc-desc">Validates JWT tokens, injects <code>X-User-ID</code> header, writes audit logs directly to DB, and reverse-proxies requests to downstream microservices. Both read and write operations for a given domain route to the same unified service.</div>
   </div>
   <h3>Routing Logic</h3>
   <div class="table-wrap">
     <table>
       <thead><tr><th>Path Pattern</th><th>Method</th><th>Routes To</th></tr></thead>
       <tbody>
-        <tr><td><code>/api/v1/chat/messages</code></td><td>POST</td><td>chat-command :8001</td></tr>
-        <tr><td><code>/api/v1/chat/messages/bulk</code></td><td>POST</td><td>chat-command :8001</td></tr>
-        <tr><td><code>/api/v1/chat/messages/{id}</code></td><td>DELETE</td><td>chat-command :8001</td></tr>
-        <tr><td><code>/api/v1/chat/sessions</code></td><td>GET</td><td>chat-query :8002</td></tr>
-        <tr><td><code>/api/v1/chat/sessions/{id}/messages</code></td><td>GET</td><td>chat-query :8002</td></tr>
-        <tr><td><code>/api/v1/plots</code></td><td>POST</td><td>plot-command :8003</td></tr>
-        <tr><td><code>/api/v1/plots/bulk</code></td><td>POST</td><td>plot-command :8003</td></tr>
-        <tr><td><code>/api/v1/plots/{id}</code></td><td>PUT / DELETE</td><td>plot-command :8003</td></tr>
-        <tr><td><code>/api/v1/plots</code></td><td>GET</td><td>plot-query :8004</td></tr>
-        <tr><td><code>/api/v1/plots/search</code></td><td>GET</td><td>plot-query :8004</td></tr>
-        <tr><td><code>/api/v1/plots/{id}</code></td><td>GET</td><td>plot-query :8004</td></tr>
+        <tr><td><code>/api/v1/chat/messages</code></td><td>POST</td><td>chat-service :8001</td></tr>
+        <tr><td><code>/api/v1/chat/messages/bulk</code></td><td>POST</td><td>chat-service :8001</td></tr>
+        <tr><td><code>/api/v1/chat/messages/{id}</code></td><td>DELETE</td><td>chat-service :8001</td></tr>
+        <tr><td><code>/api/v1/chat/sessions</code></td><td>GET</td><td>chat-service :8001</td></tr>
+        <tr><td><code>/api/v1/chat/sessions/{id}/messages</code></td><td>GET</td><td>chat-service :8001</td></tr>
+        <tr><td><code>/api/v1/plots</code></td><td>POST</td><td>plot-service :8003</td></tr>
+        <tr><td><code>/api/v1/plots/bulk</code></td><td>POST</td><td>plot-service :8003</td></tr>
+        <tr><td><code>/api/v1/plots/{id}</code></td><td>PUT / DELETE</td><td>plot-service :8003</td></tr>
+        <tr><td><code>/api/v1/plots</code></td><td>GET</td><td>plot-service :8003</td></tr>
+        <tr><td><code>/api/v1/plots/search</code></td><td>GET</td><td>plot-service :8003</td></tr>
+        <tr><td><code>/api/v1/plots/{id}</code></td><td>GET</td><td>plot-service :8003</td></tr>
+        <tr><td><code>/api/admin/audit</code></td><td>GET</td><td>api-gateway (local DB, no proxy)</td></tr>
       </tbody>
     </table>
   </div>
 </section>
 
-<section class="doc-section" id="svc-chat-cmd">
-  <h2>Chat Command Service <span class="tag tag-write" style="font-size:.75rem;margin-left:.4rem">WRITE</span></h2>
+<section class="doc-section" id="svc-chat">
+  <h2>Chat Service <span class="tag tag-write" style="font-size:.75rem;margin-left:.4rem">UNIFIED</span></h2>
   <div class="service-card svc-write" style="margin-bottom:1rem">
-    <div class="svc-name">chat-command</div>
-    <div class="svc-port">services/chat-command/  ·  Port 8001  ·  Schema: chat_write</div>
-    <div class="svc-desc">Validates commands, persists to <code>chat_write.chat_messages</code>, publishes domain events to Kafka. Supports single-message and bulk creation (up to 1,000 messages per request).</div>
+    <div class="svc-name">chat-service</div>
+    <div class="svc-port">services/chat-service/  ·  Port 8001  ·  Schemas: chat_write · chat_read</div>
+    <div class="svc-desc">Unified command + query handler. HTTP endpoints write to <code>chat_write</code> and publish Kafka events. A background consumer group (<code>chat-projector</code>) projects events into the <code>chat_read</code> denormalised model. Supports bulk creation up to 1,000 messages per request.</div>
   </div>
 
   <h3>Commands</h3>
@@ -784,22 +736,6 @@ send_email_task.delay(
     </table>
   </div>
 
-  <h3>Endpoints</h3>
-  <div class="endpoint-group">
-    <div class="endpoint"><span class="badge badge-post">POST</span><span class="path">/messages</span><span class="desc">Create single message → 201 + {id, session_id}</span></div>
-    <div class="endpoint"><span class="badge badge-post">POST</span><span class="path">/messages/bulk</span><span class="desc">Bulk create up to 1,000 → 202 + {accepted, ids}</span></div>
-    <div class="endpoint"><span class="badge badge-delete">DELETE</span><span class="path">/messages/{message_id}</span><span class="desc">Soft delete → 204</span></div>
-  </div>
-</section>
-
-<section class="doc-section" id="svc-chat-qry">
-  <h2>Chat Query Service <span class="tag tag-read" style="font-size:.75rem;margin-left:.4rem">READ</span></h2>
-  <div class="service-card svc-read" style="margin-bottom:1rem">
-    <div class="svc-name">chat-query</div>
-    <div class="svc-port">services/chat-query/  ·  Port 8002  ·  Schema: chat_read</div>
-    <div class="svc-desc">Serves paginated chat history from a denormalised read model. A background Kafka consumer (<code>chat-query-projector</code> consumer group) keeps the read model in sync with events from the command side.</div>
-  </div>
-
   <h3>Read Models</h3>
   <div class="table-wrap">
     <table>
@@ -813,18 +749,21 @@ send_email_task.delay(
 
   <h3>Endpoints</h3>
   <div class="endpoint-group">
+    <div class="endpoint"><span class="badge badge-post">POST</span><span class="path">/messages</span><span class="desc">Create single message → 201 + {id, session_id}</span></div>
+    <div class="endpoint"><span class="badge badge-post">POST</span><span class="path">/messages/bulk</span><span class="desc">Bulk create up to 1,000 → 202 + {accepted, ids}</span></div>
+    <div class="endpoint"><span class="badge badge-delete">DELETE</span><span class="path">/messages/{message_id}</span><span class="desc">Soft delete → 204</span></div>
     <div class="endpoint"><span class="badge badge-get">GET</span><span class="path">/sessions?limit=20&amp;offset=0</span><span class="desc">List user sessions with preview</span></div>
     <div class="endpoint"><span class="badge badge-get">GET</span><span class="path">/sessions/{session_id}/messages?limit=50&amp;offset=0</span><span class="desc">Paginated message history</span></div>
     <div class="endpoint"><span class="badge badge-get">GET</span><span class="path">/messages/{message_id}</span><span class="desc">Get single message</span></div>
   </div>
 </section>
 
-<section class="doc-section" id="svc-plot-cmd">
-  <h2>Plot Command Service <span class="tag tag-write" style="font-size:.75rem;margin-left:.4rem">WRITE</span></h2>
+<section class="doc-section" id="svc-plot">
+  <h2>Plot Service <span class="tag tag-write" style="font-size:.75rem;margin-left:.4rem">UNIFIED</span></h2>
   <div class="service-card svc-write" style="margin-bottom:1rem">
-    <div class="svc-name">plot-command</div>
-    <div class="svc-port">services/plot-command/  ·  Port 8003  ·  Schema: plot_write</div>
-    <div class="svc-desc">Handles all plot mutations. Bulk creation accepts up to 500 plots per request, persists them, then emits a single <code>PlotBulkCreatedEvent</code> to Kafka — keeping the HTTP response fast regardless of batch size.</div>
+    <div class="svc-name">plot-service</div>
+    <div class="svc-port">services/plot-service/  ·  Port 8003  ·  Schema: plot_unified</div>
+    <div class="svc-desc">Unified command + query handler. HTTP endpoints write to <code>plot_unified.plots</code> and publish Kafka events. A background consumer group (<code>plot-projector</code>) projects events to update denormalised fields (<code>element_count</code>, <code>version</code>) in the same schema. Bulk creation accepts up to 500 plots per request.</div>
   </div>
 
   <h3>Commands</h3>
@@ -861,24 +800,7 @@ send_email_task.delay(
     </table>
   </div>
 
-  <h3>Endpoints</h3>
-  <div class="endpoint-group">
-    <div class="endpoint"><span class="badge badge-post">POST</span><span class="path">/plots</span><span class="desc">Create single plot → 201 + {id, name, version}</span></div>
-    <div class="endpoint"><span class="badge badge-post">POST</span><span class="path">/plots/bulk</span><span class="desc">Bulk create up to 500 → 202 + {accepted, ids}</span></div>
-    <div class="endpoint"><span class="badge badge-put">PUT</span><span class="path">/plots/{plot_id}</span><span class="desc">Update plot → {id, version}</span></div>
-    <div class="endpoint"><span class="badge badge-delete">DELETE</span><span class="path">/plots/{plot_id}</span><span class="desc">Soft delete → 204</span></div>
-  </div>
-</section>
-
-<section class="doc-section" id="svc-plot-qry">
-  <h2>Plot Query Service <span class="tag tag-read" style="font-size:.75rem;margin-left:.4rem">READ</span></h2>
-  <div class="service-card svc-read" style="margin-bottom:1rem">
-    <div class="svc-name">plot-query</div>
-    <div class="svc-port">services/plot-query/  ·  Port 8004  ·  Schema: plot_read</div>
-    <div class="svc-desc">Serves plot reads from a projection-optimised read model. Includes computed <code>element_count</code> for fast dashboard rendering. Text search on <code>name</code> via <code>ILIKE</code>.</div>
-  </div>
-
-  <h3>Read Model — <code>plot_read.plots</code></h3>
+  <h3>Unified Model — <code>plot_unified.plots</code></h3>
   <div class="table-wrap">
     <table>
       <thead><tr><th>Extra Field</th><th>Type</th><th>Source</th></tr></thead>
@@ -891,6 +813,10 @@ send_email_task.delay(
 
   <h3>Endpoints</h3>
   <div class="endpoint-group">
+    <div class="endpoint"><span class="badge badge-post">POST</span><span class="path">/plots</span><span class="desc">Create single plot → 201 + {id, name, version}</span></div>
+    <div class="endpoint"><span class="badge badge-post">POST</span><span class="path">/plots/bulk</span><span class="desc">Bulk create up to 500 → 202 + {accepted, ids}</span></div>
+    <div class="endpoint"><span class="badge badge-put">PUT</span><span class="path">/plots/{plot_id}</span><span class="desc">Update plot → {id, version}</span></div>
+    <div class="endpoint"><span class="badge badge-delete">DELETE</span><span class="path">/plots/{plot_id}</span><span class="desc">Soft delete → 204</span></div>
     <div class="endpoint"><span class="badge badge-get">GET</span><span class="path">/plots?session_id=&amp;limit=20&amp;offset=0</span><span class="desc">List plots for current user</span></div>
     <div class="endpoint"><span class="badge badge-get">GET</span><span class="path">/plots/search?q=name&amp;limit=20</span><span class="desc">Search plots by name (ILIKE)</span></div>
     <div class="endpoint"><span class="badge badge-get">GET</span><span class="path">/plots/{plot_id}</span><span class="desc">Get full plot with elements</span></div>
@@ -906,10 +832,10 @@ send_email_task.delay(
     <table>
       <thead><tr><th>Topic</th><th>Partitions</th><th>Retention</th><th>Key</th><th>Publisher</th><th>Consumer Group</th></tr></thead>
       <tbody>
-        <tr><td><code>chat.events</code></td><td>12</td><td>7 days</td><td>session_id</td><td>chat-command</td><td>chat-query-projector</td></tr>
-        <tr><td><code>chat.bulk.commands</code></td><td>6</td><td>1 day</td><td>session_id</td><td>chat-command</td><td>chat-query-projector</td></tr>
-        <tr><td><code>plot.events</code></td><td>12</td><td>30 days</td><td>user_id</td><td>plot-command</td><td>plot-query-projector</td></tr>
-        <tr><td><code>plot.bulk.commands</code></td><td>6</td><td>1 day</td><td>user_id</td><td>plot-command</td><td>plot-query-projector</td></tr>
+        <tr><td><code>chat.events</code></td><td>12</td><td>7 days</td><td>session_id</td><td>chat-service</td><td>chat-projector</td></tr>
+        <tr><td><code>chat.bulk.commands</code></td><td>6</td><td>1 day</td><td>session_id</td><td>chat-service</td><td>chat-projector</td></tr>
+        <tr><td><code>plot.events</code></td><td>12</td><td>30 days</td><td>user_id</td><td>plot-service</td><td>plot-projector</td></tr>
+        <tr><td><code>plot.bulk.commands</code></td><td>6</td><td>1 day</td><td>user_id</td><td>plot-service</td><td>plot-projector</td></tr>
       </tbody>
     </table>
   </div>
@@ -927,17 +853,16 @@ docker compose -f docker-compose.cqrs.yml up kafka-init</code></pre>
 <!-- ══════════════ DATABASE ══════════════ -->
 <section class="doc-section" id="database">
   <h2>Database Schemas</h2>
-  <p>All services share a single PostgreSQL 16 instance, separated by schema. The <code>public</code> schema belongs to the monolith backend; the CQRS services each own a write schema and a read schema.</p>
+  <p>All services share a single PostgreSQL 16 instance, separated by schema. The <code>public</code> schema is owned by auth-service (via Alembic migrations run by <code>db-migrate</code>). CQRS services run their own Alembic migrations at startup.</p>
 
   <div class="table-wrap">
     <table>
-      <thead><tr><th>Schema</th><th>Owner</th><th>Side</th><th>Tables</th></tr></thead>
+      <thead><tr><th>Schema</th><th>Owner</th><th>Tables</th></tr></thead>
       <tbody>
-        <tr><td><code>public</code></td><td>Monolith</td><td>Write + Read</td><td>users, profiles, sessions, roles, permissions, role_permissions, sheets, audit_logs, file_uploads, password_reset_tokens</td></tr>
-        <tr><td><code>chat_write</code></td><td>chat-command</td><td>Write (source of truth)</td><td>chat_sessions, chat_messages</td></tr>
-        <tr><td><code>chat_read</code></td><td>chat-query</td><td>Read (projection)</td><td>chat_sessions, chat_messages (+ last_message_preview, denormalised stats)</td></tr>
-        <tr><td><code>plot_write</code></td><td>plot-command</td><td>Write (source of truth)</td><td>plots (+ version field)</td></tr>
-        <tr><td><code>plot_read</code></td><td>plot-query</td><td>Read (projection)</td><td>plots (+ element_count, version)</td></tr>
+        <tr><td><code>public</code></td><td>auth-service (+ api-gateway audit)</td><td>users, profiles, sessions, roles, permissions, role_permissions, sheets, audit_logs, file_uploads, password_reset_tokens</td></tr>
+        <tr><td><code>chat_write</code></td><td>chat-service</td><td>chat_sessions, chat_messages (source of truth)</td></tr>
+        <tr><td><code>chat_read</code></td><td>chat-service</td><td>chat_sessions, chat_messages (+ last_message_preview, denormalised stats)</td></tr>
+        <tr><td><code>plot_unified</code></td><td>plot-service</td><td>plots (write source of truth + element_count, version projection fields)</td></tr>
       </tbody>
     </table>
   </div>
@@ -946,12 +871,11 @@ docker compose -f docker-compose.cqrs.yml up kafka-init</code></pre>
   <pre><code>-- scripts/init-schemas.sql (auto-runs via docker-entrypoint-initdb.d)
 CREATE SCHEMA IF NOT EXISTS chat_write;
 CREATE SCHEMA IF NOT EXISTS chat_read;
-CREATE SCHEMA IF NOT EXISTS plot_write;
-CREATE SCHEMA IF NOT EXISTS plot_read;</code></pre>
+CREATE SCHEMA IF NOT EXISTS plot_unified;</code></pre>
 
   <h3>Migrate existing Sheets to CQRS</h3>
-  <pre><code>-- One-time backfill from monolith sheets → plot_write
-INSERT INTO plot_write.plots
+  <pre><code>-- One-time backfill from monolith sheets → plot_unified
+INSERT INTO plot_unified.plots
   (id, user_id, name, sheet_w, sheet_d, grid_step, elements, created_at, updated_at)
 SELECT id, user_id, name, sheet_w, sheet_d, grid_step, elements, created_at, updated_at
 FROM   public.sheets
@@ -980,12 +904,12 @@ make seed</code></pre>
     </div>
     <div>
       <h3>CQRS Stack</h3>
-      <pre><code># Build + start all 5 services
+      <pre><code># Build + start all 6 microservices
 # Kafka, Zookeeper, Postgres, Kafka UI
 docker compose \
-  -f docker-compose.cqrs.yml \
+  -f docker-compose.dev.yml \
   up --build</code></pre>
-      <p style="font-size:.82rem">Services: API Gateway <code>:8000</code> · Kafka UI <code>:8090</code> · PostgreSQL <code>:5432</code></p>
+      <p style="font-size:.82rem">Services: API Gateway <code>:8000</code> · Auth <code>:8010</code> · Chat <code>:8001</code> · Plot <code>:8003</code> · Notification <code>:8012</code> · Kafka UI <code>:8090</code></p>
     </div>
   </div>
 
@@ -1039,18 +963,18 @@ kubectl apply -f k8s/hpa/</code></pre>
     <table>
       <thead><tr><th>Service</th><th>Min Pods</th><th>Max Pods</th><th>Scale-up CPU%</th><th>Scale-up Mem%</th></tr></thead>
       <tbody>
-        <tr><td>chat-command</td><td>3</td><td>20</td><td>70</td><td>80</td></tr>
-        <tr><td>chat-query</td><td>3</td><td>30</td><td>60</td><td>75</td></tr>
-        <tr><td>plot-command</td><td>3</td><td>20</td><td>70</td><td>80</td></tr>
-        <tr><td>plot-query</td><td>3</td><td>30</td><td>60</td><td>75</td></tr>
+        <tr><td>chat-service</td><td>3</td><td>20</td><td>70</td><td>80</td></tr>
+        <tr><td>plot-service</td><td>3</td><td>20</td><td>70</td><td>80</td></tr>
+        <tr><td>auth-service</td><td>2</td><td>10</td><td>70</td><td>80</td></tr>
+        <tr><td>notification-service</td><td>2</td><td>8</td><td>70</td><td>80</td></tr>
         <tr><td>api-gateway</td><td>2</td><td>—</td><td>manual</td><td>—</td></tr>
       </tbody>
     </table>
   </div>
-  <div class="callout">Query services use a lower CPU trigger (60%) and higher max replicas than command services because read traffic typically exceeds write traffic by 5–10×.</div>
+  <div class="callout">chat-service and plot-service handle both reads and writes in the same pod, so they share a single HPA. Scale out based on observed request mix — if reads dominate, adjust max replicas accordingly.</div>
 
   <h3>Build &amp; push images</h3>
-  <pre><code>for svc in api-gateway chat-command chat-query plot-command plot-query; do
+  <pre><code>for svc in api-gateway auth-service chat-service plot-service payment-service notification-service; do
   docker build -t &lt;registry&gt;/plots/$svc:latest services/$svc/
   docker push &lt;registry&gt;/plots/$svc:latest
 done</code></pre>
@@ -1085,7 +1009,7 @@ done</code></pre>
         <tr><td><code>DB_POOL_SIZE</code></td><td>20</td><td>SQLAlchemy connection pool size</td></tr>
         <tr><td><code>DB_MAX_OVERFLOW</code></td><td>10</td><td>Pool overflow limit</td></tr>
         <tr><td><code>POSTGRES_USER / PASS / DB</code></td><td>mvp_user / mvp_pass / mvp_db</td><td>Docker-only variables for container init</td></tr>
-        <tr><td><code>REDIS_URL</code></td><td>redis://localhost:6379/0</td><td>Celery broker and result backend</td></tr>
+        <tr><td><code>REDIS_URL</code></td><td>redis://localhost:6379/0</td><td>Session cache and rate-limit state</td></tr>
         <tr><td><code>REDIS_PASSWORD</code></td><td>(empty)</td><td>Leave empty to disable Redis auth</td></tr>
       </tbody>
     </table>
@@ -1164,7 +1088,7 @@ done</code></pre>
         <tr><td>roles</td><td><code>/api/auth/roles</code></td><td>Monolith</td></tr>
         <tr><td>permissions</td><td><code>/api/auth/permissions</code></td><td>Monolith</td></tr>
         <tr><td>admin</td><td><code>/api/admin</code></td><td>Monolith</td></tr>
-        <tr><td>audit</td><td><code>/api/admin/audit</code></td><td>Monolith</td></tr>
+        <tr><td>audit</td><td><code>/api/admin/audit</code></td><td>API Gateway (served locally from DB)</td></tr>
         <tr><td>notifications</td><td><code>/api/notifications</code></td><td>Monolith</td></tr>
         <tr><td>uploads</td><td><code>/api/uploads</code></td><td>Monolith</td></tr>
         <tr><td>payments</td><td><code>/api/payments</code></td><td>Monolith</td></tr>
@@ -1172,8 +1096,9 @@ done</code></pre>
         <tr><td>google-auth</td><td><code>/api/auth/google</code></td><td>Monolith (conditional)</td></tr>
         <tr><td>azure-auth</td><td><code>/api/auth/azure</code></td><td>Monolith (conditional)</td></tr>
         <tr><td>health</td><td><code>/health</code></td><td>Monolith</td></tr>
-        <tr><td>chat-write</td><td><code>/api/v1/chat</code></td><td>API Gateway → chat-command / chat-query</td></tr>
-        <tr><td>plot-write</td><td><code>/api/v1/plots</code></td><td>API Gateway → plot-command / plot-query</td></tr>
+        <tr><td>chat</td><td><code>/api/v1/chat</code></td><td>API Gateway → chat-service :8001</td></tr>
+        <tr><td>plots</td><td><code>/api/v1/plots</code></td><td>API Gateway → plot-service :8003</td></tr>
+        <tr><td>notifications</td><td><code>/api/notifications</code></td><td>API Gateway → notification-service :8012</td></tr>
       </tbody>
     </table>
   </div>

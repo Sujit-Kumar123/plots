@@ -614,7 +614,7 @@ details[open] .summary-arrow { transform: rotate(90deg); }
         <span class="action-num">07</span>
         <div class="action-body">
           <div class="action-title">Add missing database pool parameters to all microservices</div>
-          <div class="action-desc">The four CQRS service databases (<code>chat-command</code>, <code>chat-query</code>, <code>plot-command</code>, <code>plot-query</code>) are missing <code>pool_timeout=30</code> and <code>pool_recycle=1800</code> on their <code>create_async_engine()</code> calls. Without <code>pool_recycle</code>, connections become stale after server-side timeouts and cause <em>"server has closed the connection"</em> errors.</div>
+          <div class="action-desc">The CQRS services (<code>chat-service</code>, <code>plot-service</code>) are missing <code>pool_timeout=30</code> and <code>pool_recycle=1800</code> on their <code>create_async_engine()</code> calls. Without <code>pool_recycle</code>, connections become stale after server-side timeouts and cause <em>"server has closed the connection"</em> errors.</div>
         </div>
         <span class="action-sev"><span class="finding-sev sev-major">Major</span></span>
       </div>
@@ -632,7 +632,7 @@ details[open] .summary-arrow { transform: rotate(90deg); }
         <span class="action-num">09</span>
         <div class="action-body">
           <div class="action-title">Scale Zookeeper to 3 replicas</div>
-          <div class="action-desc">Zookeeper runs as a single pod. If it restarts, Kafka loses its coordination layer and all 5 microservices stop producing and consuming events. A Zookeeper quorum requires an odd number of nodes ≥ 3.</div>
+          <div class="action-desc">Zookeeper runs as a single pod. If it restarts, Kafka loses its coordination layer and all 6 microservices stop producing and consuming events. A Zookeeper quorum requires an odd number of nodes ≥ 3.</div>
         </div>
         <span class="action-sev"><span class="finding-sev sev-major">Major</span></span>
       </div>
@@ -667,7 +667,7 @@ details[open] .summary-arrow { transform: rotate(90deg); }
       <div class="details-body">
         <div class="finding finding-crit">
           <div class="finding-head"><span class="finding-sev sev-crit">Critical</span><span class="finding-title">Microservices trust the gateway — no auth on internal ports</span></div>
-          <div class="finding-desc">The API Gateway validates JWT, but the four downstream services (<code>chat-command</code>, <code>chat-query</code>, <code>plot-command</code>, <code>plot-query</code>) have zero authentication middleware. If a pod in the cluster can reach <code>chat-command:8001</code> directly, it bypasses all security controls.</div>
+          <div class="finding-desc">The API Gateway validates JWT, but the downstream services (<code>chat-service</code>, <code>plot-service</code>, <code>auth-service</code>, <code>notification-service</code>) have zero network-level authentication middleware. If a pod in the cluster can reach <code>chat-service:8001</code> directly, it bypasses all security controls.</div>
           <div class="finding-action">Add a lightweight JWT validation middleware to each microservice, or enforce mTLS via a service mesh.</div>
         </div>
         <div class="finding finding-crit">
@@ -711,7 +711,7 @@ details[open] .summary-arrow { transform: rotate(90deg); }
         <div class="finding finding-crit">
           <div class="finding-head"><span class="finding-sev sev-crit">Critical</span><span class="finding-title">No metrics — Prometheus, OpenTelemetry, or otherwise</span></div>
           <div class="finding-desc">Zero visibility into request rates, p99 latencies, error rates, Kafka consumer lag, or database pool saturation. You cannot alert on what you cannot measure.</div>
-          <div class="finding-action">Add <code>prometheus-fastapi-instrumentator</code> to all 5 services + the monolith. Add a <code>/metrics</code> endpoint. Deploy Prometheus + Grafana. Create <code>ServiceMonitor</code> CRDs.</div>
+          <div class="finding-action">Add <code>prometheus-fastapi-instrumentator</code> to all 6 microservices. Add a <code>/metrics</code> endpoint. Deploy Prometheus + Grafana. Create <code>ServiceMonitor</code> CRDs.</div>
         </div>
         <div class="finding finding-major">
           <div class="finding-head"><span class="finding-sev sev-major">Major</span><span class="finding-title">No distributed tracing across microservices</span></div>
@@ -744,12 +744,12 @@ details[open] .summary-arrow { transform: rotate(90deg); }
       <div class="details-body">
         <div class="finding finding-major">
           <div class="finding-head"><span class="finding-sev sev-major">Major</span><span class="finding-title">No circuit breaker for gateway → downstream calls</span></div>
-          <div class="finding-desc">The API Gateway uses <code>httpx.AsyncClient</code> with timeouts, but if all replicas of <code>chat-command</code> are slow, the gateway queues requests until its own connection pool exhausts, cascading the failure.</div>
+          <div class="finding-desc">The API Gateway uses <code>httpx.AsyncClient</code> with timeouts, but if all replicas of <code>chat-service</code> are slow, the gateway queues requests until its own connection pool exhausts, cascading the failure.</div>
           <div class="finding-action">Add <code>pybreaker</code> or implement a simple exponential-backoff retry with a max of 2 retries and a fast-fail circuit state after 5 consecutive failures.</div>
         </div>
         <div class="finding finding-major">
-          <div class="finding-head"><span class="finding-sev sev-major">Major</span><span class="finding-title">Missing pool_timeout and pool_recycle on all 4 CQRS databases</span></div>
-          <div class="finding-desc">The monolith sets <code>pool_recycle=1800</code> to prevent stale connections, but none of the four microservice databases do. After 30 minutes of inactivity the pool returns dead connections and the service throws errors until recycled.</div>
+          <div class="finding-head"><span class="finding-sev sev-major">Major</span><span class="finding-title">Missing pool_timeout and pool_recycle on CQRS service databases</span></div>
+          <div class="finding-desc">The api-gateway sets <code>pool_recycle=1800</code> to prevent stale connections, but the other microservice databases (<code>chat-service</code>, <code>plot-service</code>) do not. After 30 minutes of inactivity the pool returns dead connections and the service throws errors until recycled.</div>
           <div class="finding-action">Add <code>pool_timeout=30, pool_recycle=1800</code> to every <code>create_async_engine()</code> call in the microservices.</div>
         </div>
         <div class="finding finding-minor">
@@ -783,7 +783,7 @@ details[open] .summary-arrow { transform: rotate(90deg); }
         </div>
         <div class="finding finding-major">
           <div class="finding-head"><span class="finding-sev sev-major">Major</span><span class="finding-title">Single Zookeeper replica</span></div>
-          <div class="finding-desc">Zookeeper coordinates Kafka broker elections. One pod means any restart halts Kafka operations across all 5 microservices until it recovers.</div>
+          <div class="finding-desc">Zookeeper coordinates Kafka broker elections. One pod means any restart halts Kafka operations across all 6 microservices until it recovers.</div>
           <div class="finding-action">Scale Zookeeper to 3 replicas. Zookeeper requires an odd quorum number to elect a leader.</div>
         </div>
         <div class="finding finding-minor">
@@ -802,7 +802,7 @@ details[open] .summary-arrow { transform: rotate(90deg); }
         </div>
         <div class="finding finding-good">
           <div class="finding-head"><span class="finding-sev sev-good">Good</span><span class="finding-title">HPA configured with CPU + memory thresholds</span></div>
-          <div class="finding-desc">All 5 microservices have HPAs (min 3 → max 20-30 replicas) triggered at 60–70% CPU and 75–80% memory. Scales out ahead of saturation.</div>
+          <div class="finding-desc">All 6 microservices have HPAs (min 2–3 → max 8–20 replicas) triggered at 70% CPU and 80% memory. Scales out ahead of saturation.</div>
         </div>
         <div class="finding finding-good">
           <div class="finding-head"><span class="finding-sev sev-good">Good</span><span class="finding-title">Kafka broker replicas: RF=3, minInSync=2</span></div>
@@ -855,7 +855,7 @@ details[open] .summary-arrow { transform: rotate(90deg); }
         </div>
         <div class="finding finding-major">
           <div class="finding-head"><span class="finding-sev sev-major">Major</span><span class="finding-title">No high-availability — single Postgres instance</span></div>
-          <div class="finding-desc">A pod crash takes the database down for all 7 services (monolith + 5 microservices) until Kubernetes reschedules it and the storage re-attaches. StatefulSet reschedule can take 2–5 minutes.</div>
+          <div class="finding-desc">A pod crash takes the database down for all 6 microservices until Kubernetes reschedules it and the storage re-attaches. StatefulSet reschedule can take 2–5 minutes.</div>
           <div class="finding-action">Deploy Patroni for Postgres HA (3 nodes), or move to a managed service with automatic failover. Query services should use a read replica.</div>
         </div>
         <div class="finding finding-major">

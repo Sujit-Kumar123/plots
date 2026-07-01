@@ -1,0 +1,890 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Architecture Reference — Plots</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+a{color:inherit;text-decoration:none}
+
+:root{
+  --bg:       #060D18;
+  --s0:       #0A1525;
+  --s1:       #0E1E35;
+  --s2:       #132540;
+  --border:   #162B45;
+  --border2:  #1F3E60;
+
+  --text:       #C8D9E8;
+  --text-hi:    #E8F0F8;
+  --text-mid:   #7A9AB8;
+  --text-lo:    #3D5A78;
+
+  --gateway:    #7C3AED;
+  --gateway-lo: rgba(124,58,237,.12);
+  --auth:       #2563EB;
+  --auth-lo:    rgba(37,99,235,.12);
+  --cqrs:       #0D9488;
+  --cqrs-lo:    rgba(13,148,136,.12);
+  --kafka:      #C2872B;
+  --kafka-lo:   rgba(194,135,43,.12);
+  --payment:    #475569;
+  --payment-lo: rgba(71,85,105,.12);
+  --notify:     #059669;
+  --notify-lo:  rgba(5,150,105,.12);
+  --infra:      #1E3A5A;
+  --danger:     #DC2626;
+
+  --mono: ui-monospace,'Cascadia Code','JetBrains Mono','Fira Code',monospace;
+  --sans: -apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;
+
+  --sidebar: 222px;
+  --r: 5px;
+}
+
+body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:13.5px;line-height:1.6;min-height:100vh}
+h1,h2,h3,h4{color:var(--text-hi);text-wrap:balance;line-height:1.2}
+h2{font-size:1.15rem;font-weight:600;letter-spacing:-.01em;margin-bottom:.55rem;padding-bottom:.45rem;border-bottom:1px solid var(--border)}
+h3{font-size:.95rem;font-weight:600;margin-bottom:.5rem;margin-top:1.2rem}
+h4{font-size:.78rem;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--text-mid);margin-bottom:.4rem}
+p{margin-bottom:.65rem;max-width:68ch;color:var(--text)}
+code{font-family:var(--mono);font-size:.8em;color:#93C5FD;background:var(--s1);padding:.12em .38em;border-radius:3px;border:1px solid var(--border)}
+pre{font-family:var(--mono);font-size:.8rem;background:var(--s1);border:1px solid var(--border);border-radius:var(--r);padding:.85rem 1rem;overflow-x:auto;line-height:1.5;color:var(--text);margin-bottom:.85rem}
+pre code{background:none;border:none;padding:0;font-size:1em;color:inherit}
+
+/* ── Layout ──────────────────────────────────────────────────────── */
+.layout{display:flex;min-height:100vh}
+
+.sidebar{
+  position:fixed;top:0;left:0;bottom:0;
+  width:var(--sidebar);
+  background:var(--s0);
+  border-right:1px solid var(--border);
+  overflow-y:auto;
+  padding:1.4rem 0 2rem;
+  z-index:40;
+  scrollbar-width:thin;
+  scrollbar-color:var(--border) transparent;
+}
+.sb-logo{padding:.2rem 1.2rem 1rem;border-bottom:1px solid var(--border);margin-bottom:.6rem}
+.sb-logo-name{font-size:1rem;font-weight:700;color:var(--text-hi);letter-spacing:-.02em;display:flex;align-items:center;gap:.4rem}
+.sb-dot{width:9px;height:9px;border-radius:50%;background:var(--gateway);flex-shrink:0}
+.sb-logo-sub{font-family:var(--mono);font-size:.7rem;color:var(--text-lo);margin-top:.15rem}
+.sb-logo-date{font-family:var(--mono);font-size:.65rem;color:var(--text-lo);margin-top:.1rem}
+
+.nav-group{margin-bottom:.15rem}
+.nav-label{font-size:.62rem;font-weight:600;text-transform:uppercase;letter-spacing:.1em;color:var(--text-lo);padding:.5rem 1.2rem .2rem;display:block}
+.nav-link{display:flex;align-items:center;gap:.45rem;padding:.32rem 1.2rem;font-size:.78rem;color:var(--text-mid);border-left:2px solid transparent;transition:color .12s,background .12s}
+.nav-link:hover{color:var(--text-hi);background:var(--s1)}
+.nav-link.active{color:var(--text-hi);border-left-color:var(--gateway);background:var(--gateway-lo)}
+.nav-pip{width:5px;height:5px;border-radius:50%;flex-shrink:0;opacity:.7}
+.pip-gw{background:var(--gateway)} .pip-auth{background:var(--auth)}
+.pip-cqrs{background:var(--cqrs)} .pip-kafka{background:var(--kafka)}
+.pip-infra{background:var(--payment)} .pip-none{background:var(--text-lo)}
+
+.main{margin-left:var(--sidebar);flex:1;padding:2rem 2.5rem 4rem;max-width:calc(var(--sidebar) + 900px)}
+
+/* ── Sections ────────────────────────────────────────────────────── */
+.section{margin-bottom:3rem;scroll-margin-top:1.8rem}
+
+/* ── Header strip ────────────────────────────────────────────────── */
+.doc-header{padding:1.6rem 0 1.8rem;border-bottom:1px solid var(--border);margin-bottom:2rem}
+.doc-eyebrow{font-family:var(--mono);font-size:.68rem;letter-spacing:.12em;text-transform:uppercase;color:var(--text-lo);margin-bottom:.5rem}
+.doc-title{font-size:1.8rem;font-weight:700;letter-spacing:-.025em;color:var(--text-hi);margin-bottom:.5rem}
+.doc-meta{display:flex;flex-wrap:wrap;gap:.5rem;align-items:center;margin-top:.8rem}
+.badge{display:inline-flex;align-items:center;font-family:var(--mono);font-size:.68rem;font-weight:600;letter-spacing:.03em;padding:.2em .6em;border-radius:3px;white-space:nowrap}
+.badge-blue  {background:var(--auth-lo);color:#60a5fa;border:1px solid rgba(37,99,235,.3)}
+.badge-teal  {background:var(--cqrs-lo);color:#2dd4bf;border:1px solid rgba(13,148,136,.3)}
+.badge-amber {background:var(--kafka-lo);color:#fcd34d;border:1px solid rgba(194,135,43,.3)}
+.badge-violet{background:var(--gateway-lo);color:#a78bfa;border:1px solid rgba(124,58,237,.3)}
+.badge-gray  {background:var(--s1);color:var(--text-mid);border:1px solid var(--border)}
+.badge-green {background:var(--notify-lo);color:#6ee7b7;border:1px solid rgba(5,150,105,.3)}
+
+/* ── Arch SVG wrapper ─────────────────────────────────────────────── */
+.arch-wrap{background:var(--s0);border:1px solid var(--border);border-radius:var(--r);padding:1.2rem 1rem .8rem;margin-bottom:1rem;overflow-x:auto}
+.arch-wrap svg{min-width:580px;display:block;margin:0 auto}
+
+/* ── Service grid ─────────────────────────────────────────────────── */
+.svc-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:.7rem;margin-bottom:1rem}
+.svc-card{background:var(--s1);border:1px solid var(--border);border-radius:var(--r);padding:1rem 1.1rem;position:relative;overflow:hidden}
+.svc-card::before{content:'';position:absolute;top:0;left:0;right:0;height:2.5px}
+.svc-card.c-gw::before{background:var(--gateway)}
+.svc-card.c-auth::before{background:var(--auth)}
+.svc-card.c-cqrs::before{background:var(--cqrs)}
+.svc-card.c-payment::before{background:var(--payment)}
+.svc-card.c-notify::before{background:var(--notify)}
+.svc-name{font-family:var(--mono);font-size:.82rem;font-weight:600;color:var(--text-hi);margin-bottom:.18rem}
+.svc-port{font-family:var(--mono);font-size:.72rem;color:var(--text-lo);margin-bottom:.5rem}
+.svc-desc{font-size:.8rem;color:var(--text);line-height:1.5}
+.svc-tags{display:flex;flex-wrap:wrap;gap:.3rem;margin-top:.55rem}
+
+/* ── Tables ───────────────────────────────────────────────────────── */
+.tbl-wrap{overflow-x:auto;border-radius:var(--r);border:1px solid var(--border);margin-bottom:1rem}
+table{width:100%;border-collapse:collapse;font-size:.8rem;font-variant-numeric:tabular-nums}
+thead tr{background:var(--s2)}
+thead th{padding:.5rem .75rem;text-align:left;font-size:.67rem;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--text-mid);white-space:nowrap}
+tbody tr{border-top:1px solid var(--border)}
+tbody tr:hover{background:var(--s1)}
+td{padding:.48rem .75rem;color:var(--text);vertical-align:top;line-height:1.45}
+td:first-child{color:var(--text-hi)}
+td code{font-size:.75rem}
+
+/* ── Method badges ────────────────────────────────────────────────── */
+.m{display:inline-block;font-family:var(--mono);font-size:.66rem;font-weight:700;padding:.1em .45em;border-radius:2px;margin-right:.25rem;vertical-align:middle}
+.m-get   {background:rgba(13,148,136,.2);color:#2dd4bf}
+.m-post  {background:rgba(37,99,235,.2);color:#60a5fa}
+.m-put   {background:rgba(194,135,43,.2);color:#fcd34d}
+.m-patch {background:rgba(124,58,237,.2);color:#a78bfa}
+.m-del   {background:rgba(220,38,38,.2);color:#f87171}
+
+/* ── Callout ──────────────────────────────────────────────────────── */
+.callout{background:var(--s1);border-left:2.5px solid var(--kafka);border-radius:0 var(--r) var(--r) 0;padding:.65rem .9rem;margin-bottom:.85rem;font-size:.82rem}
+.callout.blue{border-left-color:var(--auth)}
+.callout.teal{border-left-color:var(--cqrs)}
+.callout.red{border-left-color:var(--danger)}
+.callout strong{color:var(--text-hi)}
+
+/* ── Two-col ──────────────────────────────────────────────────────── */
+.two-col{display:grid;grid-template-columns:1fr 1fr;gap:.75rem;margin-bottom:1rem}
+
+/* ── Schema chips ─────────────────────────────────────────────────── */
+.schema-row{display:flex;flex-wrap:wrap;gap:.4rem;margin-bottom:.75rem}
+.schema-chip{font-family:var(--mono);font-size:.72rem;padding:.22em .6em;border-radius:3px;border:1px solid}
+.sc-pub{background:var(--s0);color:#60a5fa;border-color:rgba(37,99,235,.4)}
+.sc-cqrs{background:var(--s0);color:#2dd4bf;border-color:rgba(13,148,136,.4)}
+.sc-infra{background:var(--s0);color:var(--text-mid);border-color:var(--border2)}
+
+/* ── Security chain ──────────────────────────────────────────────── */
+.chain{display:flex;flex-wrap:wrap;align-items:center;gap:0;margin-bottom:.85rem;font-size:.78rem}
+.chain-step{background:var(--s1);border:1px solid var(--border);padding:.35rem .7rem;border-radius:3px;white-space:nowrap;color:var(--text)}
+.chain-arrow{color:var(--text-lo);padding:0 .35rem;font-size:.85rem;flex-shrink:0}
+
+/* ── Kafka flow ───────────────────────────────────────────────────── */
+.kf-flow{display:grid;grid-template-columns:1fr auto 1fr;gap:.5rem;align-items:start;margin-bottom:.85rem}
+.kf-box{background:var(--s1);border:1px solid var(--border);border-radius:var(--r);padding:.7rem .85rem;font-size:.8rem}
+.kf-mid{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:.3rem;padding-top:.5rem}
+.kf-topic{font-family:var(--mono);font-size:.7rem;color:var(--text-mid)}
+
+/* ── Deployment cards ────────────────────────────────────────────── */
+.deploy-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:.7rem;margin-bottom:.85rem}
+.deploy-card{background:var(--s1);border:1px solid var(--border);border-radius:var(--r);padding:.9rem 1rem}
+.deploy-title{font-family:var(--mono);font-size:.8rem;font-weight:600;color:var(--text-hi);margin-bottom:.3rem}
+.deploy-sub{font-size:.75rem;color:var(--text-mid);margin-bottom:.55rem}
+.deploy-list{list-style:none;font-family:var(--mono);font-size:.72rem;color:var(--text);display:flex;flex-direction:column;gap:.2rem}
+.deploy-list li::before{content:'→ ';color:var(--text-lo)}
+
+@keyframes dash-flow{to{stroke-dashoffset:-20}}
+
+@media(max-width:720px){
+  .sidebar{transform:translateX(-100%)}
+  .main{margin-left:0;padding:1.2rem 1rem 3rem}
+  .two-col{grid-template-columns:1fr}
+  .svc-grid{grid-template-columns:1fr}
+}
+@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<div class="layout">
+
+<!-- ══════ SIDEBAR ══════ -->
+<nav class="sidebar" id="sidebar">
+  <div class="sb-logo">
+    <div class="sb-logo-name"><span class="sb-dot"></span>Plots</div>
+    <div class="sb-logo-sub">Architecture Reference</div>
+    <div class="sb-logo-date">rev 2026-06-30</div>
+  </div>
+
+  <div class="nav-group">
+    <a href="#overview"    class="nav-link"><span class="nav-pip pip-none"></span>Overview</a>
+    <a href="#diagram"     class="nav-link"><span class="nav-pip pip-gw"></span>Architecture Diagram</a>
+  </div>
+
+  <div class="nav-group">
+    <span class="nav-label">Services</span>
+    <a href="#api-gateway"      class="nav-link"><span class="nav-pip pip-gw"></span>API Gateway</a>
+    <a href="#auth-service"     class="nav-link"><span class="nav-pip pip-auth"></span>Auth Service</a>
+    <a href="#chat-service"     class="nav-link"><span class="nav-pip pip-cqrs"></span>Chat Service</a>
+    <a href="#plot-service"     class="nav-link"><span class="nav-pip pip-cqrs"></span>Plot Service</a>
+    <a href="#notification-svc" class="nav-link"><span class="nav-pip pip-none"></span>Notification</a>
+    <a href="#payment-svc"      class="nav-link"><span class="nav-pip pip-infra"></span>Payment</a>
+  </div>
+
+  <div class="nav-group">
+    <span class="nav-label">Data</span>
+    <a href="#data-layer"  class="nav-link"><span class="nav-pip pip-infra"></span>PostgreSQL Schemas</a>
+    <a href="#redis"       class="nav-link"><span class="nav-pip pip-infra"></span>Redis</a>
+    <a href="#kafka"       class="nav-link"><span class="nav-pip pip-kafka"></span>Kafka / CQRS</a>
+  </div>
+
+  <div class="nav-group">
+    <span class="nav-label">Cross-Cutting</span>
+    <a href="#security"    class="nav-link"><span class="nav-pip pip-auth"></span>Security</a>
+    <a href="#routing"     class="nav-link"><span class="nav-pip pip-gw"></span>Gateway Routing</a>
+    <a href="#deployment"  class="nav-link"><span class="nav-pip pip-infra"></span>Deployment</a>
+    <a href="#env-vars"    class="nav-link"><span class="nav-pip pip-none"></span>Env Variables</a>
+  </div>
+</nav>
+
+<!-- ══════ MAIN ══════ -->
+<main class="main">
+
+<!-- ── Doc header ── -->
+<div class="doc-header" id="overview">
+  <div class="doc-eyebrow">Technical Documentation · 2026-06-30</div>
+  <div class="doc-title">Architecture Reference</div>
+  <p style="max-width:62ch;margin-bottom:.75rem">Six FastAPI microservices behind a single API Gateway, event-driven CQRS for chat and plot workloads via Apache Kafka, JWT authentication, and a unified PostgreSQL instance with per-service schemas.</p>
+  <div class="doc-meta">
+    <span class="badge badge-blue">Python 3.12</span>
+    <span class="badge badge-blue">FastAPI 0.115</span>
+    <span class="badge badge-gray">Next.js 16</span>
+    <span class="badge badge-gray">React 19</span>
+    <span class="badge badge-gray">TypeScript 5</span>
+    <span class="badge badge-teal">PostgreSQL 16 + pgvector</span>
+    <span class="badge badge-teal">Redis 7</span>
+    <span class="badge badge-amber">Apache Kafka</span>
+    <span class="badge badge-violet">Kubernetes</span>
+    <span class="badge badge-green">SendGrid · Twilio</span>
+    <span class="badge badge-gray">Bun · uv · Docker</span>
+  </div>
+</div>
+
+<!-- ── Architecture diagram ── -->
+<section class="section" id="diagram">
+  <h2>Architecture Diagram</h2>
+  <p>Full request path from browser through Next.js to the API Gateway, across the service tier, and down into the event streaming and data layers.</p>
+
+  <div class="arch-wrap">
+    <svg viewBox="0 0 860 410" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="System Architecture">
+      <defs>
+        <marker id="aw" markerWidth="6" markerHeight="6" refX="5.5" refY="3" orient="auto">
+          <path d="M0,0 L6,3 L0,6 Z" fill="#4E6882"/>
+        </marker>
+        <marker id="ab" markerWidth="6" markerHeight="6" refX="5.5" refY="3" orient="auto">
+          <path d="M0,0 L6,3 L0,6 Z" fill="#0D9488"/>
+        </marker>
+        <marker id="ak" markerWidth="6" markerHeight="6" refX="5.5" refY="3" orient="auto">
+          <path d="M0,0 L6,3 L0,6 Z" fill="#C2872B"/>
+        </marker>
+      </defs>
+
+      <!-- ── Browser ── -->
+      <rect x="350" y="8" width="160" height="36" rx="4" fill="#0A1525" stroke="#4E6882" stroke-width="1"/>
+      <text x="430" y="22" text-anchor="middle" fill="#C8D9E8" font-size="10.5" font-family="-apple-system,system-ui,sans-serif" font-weight="600">Browser / Client</text>
+      <text x="430" y="36" text-anchor="middle" fill="#3D5A78" font-size="9" font-family="ui-monospace,monospace">HTTP  ·  WebSocket</text>
+      <line x1="430" y1="44" x2="430" y2="58" stroke="#4E6882" stroke-width="1.2" marker-end="url(#aw)"/>
+
+      <!-- ── Frontend ── -->
+      <rect x="300" y="58" width="260" height="44" rx="4" fill="#0A1525" stroke="#334155" stroke-width="1.2"/>
+      <text x="430" y="75" text-anchor="middle" fill="#C8D9E8" font-size="10.5" font-family="-apple-system,system-ui,sans-serif" font-weight="600">Next.js 16  +  Nginx</text>
+      <text x="430" y="91" text-anchor="middle" fill="#3D5A78" font-size="9" font-family="ui-monospace,monospace">:80/:3000  ·  /api/* → api-gateway:8000</text>
+      <line x1="430" y1="102" x2="430" y2="116" stroke="#4E6882" stroke-width="1.2" marker-end="url(#aw)"/>
+
+      <!-- ── API Gateway ── -->
+      <rect x="12" y="116" width="836" height="52" rx="4" fill="#130C28" stroke="#7C3AED" stroke-width="1.5"/>
+      <text x="430" y="138" text-anchor="middle" fill="#E8F0F8" font-size="11" font-family="-apple-system,system-ui,sans-serif" font-weight="700">API Gateway  :8000</text>
+      <text x="430" y="155" text-anchor="middle" fill="#a78bfa" font-size="9" font-family="ui-monospace,monospace">JWT validation  ·  session cache  ·  rate limiting  ·  audit logging  ·  HTTP proxy</text>
+
+      <!-- ── Gateway → services ── -->
+      <line x1="88"  y1="168" x2="88"  y2="184" stroke="#4E6882" stroke-width="1.2" marker-end="url(#aw)"/>
+      <line x1="258" y1="168" x2="258" y2="184" stroke="#4E6882" stroke-width="1.2" marker-end="url(#aw)"/>
+      <line x1="428" y1="168" x2="428" y2="184" stroke="#4E6882" stroke-width="1.2" marker-end="url(#aw)"/>
+      <line x1="598" y1="168" x2="598" y2="184" stroke="#4E6882" stroke-width="1.2" marker-end="url(#aw)"/>
+      <line x1="779" y1="168" x2="779" y2="184" stroke="#4E6882" stroke-width="1.2" marker-end="url(#aw)"/>
+
+      <!-- ── auth-service ── -->
+      <rect x="12"  y="184" width="152" height="52" rx="4" fill="#0B1828" stroke="#2563EB" stroke-width="1.3"/>
+      <text x="88"  y="206" text-anchor="middle" fill="#E8F0F8" font-size="10" font-family="-apple-system,system-ui,sans-serif" font-weight="600">auth-service</text>
+      <text x="88"  y="222" text-anchor="middle" fill="#60a5fa" font-size="8.5" font-family="ui-monospace,monospace">:8010  ·  public schema</text>
+
+      <!-- ── chat-service ── -->
+      <rect x="182" y="184" width="152" height="52" rx="4" fill="#091E20" stroke="#0D9488" stroke-width="1.3"/>
+      <text x="258" y="206" text-anchor="middle" fill="#E8F0F8" font-size="10" font-family="-apple-system,system-ui,sans-serif" font-weight="600">chat-service</text>
+      <text x="258" y="222" text-anchor="middle" fill="#2dd4bf" font-size="8.5" font-family="ui-monospace,monospace">:8001  ·  chat_write/read</text>
+
+      <!-- ── plot-service ── -->
+      <rect x="352" y="184" width="152" height="52" rx="4" fill="#091E20" stroke="#0D9488" stroke-width="1.3"/>
+      <text x="428" y="206" text-anchor="middle" fill="#E8F0F8" font-size="10" font-family="-apple-system,system-ui,sans-serif" font-weight="600">plot-service</text>
+      <text x="428" y="222" text-anchor="middle" fill="#2dd4bf" font-size="8.5" font-family="ui-monospace,monospace">:8003  ·  plot_unified</text>
+
+      <!-- ── payment-service ── -->
+      <rect x="522" y="184" width="152" height="52" rx="4" fill="#0D1520" stroke="#475569" stroke-width="1.3"/>
+      <text x="598" y="206" text-anchor="middle" fill="#E8F0F8" font-size="10" font-family="-apple-system,system-ui,sans-serif" font-weight="600">payment-service</text>
+      <text x="598" y="222" text-anchor="middle" fill="#94a3b8" font-size="8.5" font-family="ui-monospace,monospace">:8011  ·  stateless</text>
+
+      <!-- ── notification-service ── -->
+      <rect x="692" y="184" width="156" height="52" rx="4" fill="#071A12" stroke="#059669" stroke-width="1.3"/>
+      <text x="770" y="206" text-anchor="middle" fill="#E8F0F8" font-size="10" font-family="-apple-system,system-ui,sans-serif" font-weight="600">notification-service</text>
+      <text x="770" y="222" text-anchor="middle" fill="#6ee7b7" font-size="8.5" font-family="ui-monospace,monospace">:8012  ·  stateless</text>
+
+      <!-- ── Publish labels ── -->
+      <text x="246" y="263" fill="#60a5fa" font-size="7.5" font-family="-apple-system,system-ui,sans-serif">publish</text>
+      <text x="416" y="263" fill="#60a5fa" font-size="7.5" font-family="-apple-system,system-ui,sans-serif">publish</text>
+      <text x="280" y="263" fill="#C2872B" font-size="7.5" font-family="-apple-system,system-ui,sans-serif">consume</text>
+      <text x="450" y="263" fill="#C2872B" font-size="7.5" font-family="-apple-system,system-ui,sans-serif">consume</text>
+
+      <!-- ── chat/plot → Kafka (solid, publish) ── -->
+      <line x1="251" y1="236" x2="251" y2="280" stroke="#0D9488" stroke-width="1.3" marker-end="url(#ab)"/>
+      <line x1="421" y1="236" x2="421" y2="280" stroke="#0D9488" stroke-width="1.3" marker-end="url(#ab)"/>
+
+      <!-- ── Kafka → chat/plot (dashed, consume) ── -->
+      <line x1="265" y1="280" x2="265" y2="236" stroke="#C2872B" stroke-width="1.3" stroke-dasharray="5,3"
+            marker-end="url(#ak)" style="animation:dash-flow 1s linear infinite"/>
+      <line x1="435" y1="280" x2="435" y2="236" stroke="#C2872B" stroke-width="1.3" stroke-dasharray="5,3"
+            marker-end="url(#ak)" style="animation:dash-flow 1s linear infinite;animation-delay:.5s"/>
+
+      <!-- ── Kafka ── -->
+      <rect x="182" y="280" width="352" height="46" rx="4" fill="#1A0E00" stroke="#C2872B" stroke-width="1.5"/>
+      <text x="358" y="300" text-anchor="middle" fill="#E8F0F8" font-size="10.5" font-family="-apple-system,system-ui,sans-serif" font-weight="700">Apache Kafka  :9092</text>
+      <text x="358" y="316" text-anchor="middle" fill="#fcd34d" font-size="8.5" font-family="ui-monospace,monospace">chat.events  ·  chat.bulk.commands  ·  plot.events  ·  plot.bulk.commands</text>
+
+      <!-- ── PostgreSQL ── -->
+      <rect x="12"  y="354" width="640" height="48" rx="4" fill="#0A1520" stroke="#334155" stroke-width="1.2"/>
+      <text x="332" y="373" text-anchor="middle" fill="#E8F0F8" font-size="10.5" font-family="-apple-system,system-ui,sans-serif" font-weight="700">PostgreSQL 16  +  pgvector  :5432</text>
+      <text x="332" y="390" text-anchor="middle" fill="#7A9AB8" font-size="8.5" font-family="ui-monospace,monospace">public  ·  chat_write  ·  chat_read  ·  plot_unified</text>
+
+      <!-- ── Redis ── -->
+      <rect x="672" y="354" width="176" height="48" rx="4" fill="#0A1520" stroke="#334155" stroke-width="1.2"/>
+      <text x="760" y="373" text-anchor="middle" fill="#E8F0F8" font-size="10.5" font-family="-apple-system,system-ui,sans-serif" font-weight="700">Redis  :6379</text>
+      <text x="760" y="390" text-anchor="middle" fill="#7A9AB8" font-size="8.5" font-family="ui-monospace,monospace">sessions  ·  rate limits</text>
+    </svg>
+  </div>
+
+  <div class="callout teal"><strong>Amber dashed arrows</strong> are Kafka consume events — chat-service and plot-service run an embedded projector consumer group that updates their read models asynchronously, independent of the HTTP request cycle.</div>
+
+  <div class="two-col">
+    <div style="background:var(--s1);border:1px solid var(--border);border-radius:var(--r);padding:.85rem 1rem">
+      <h4>Service-to-service auth</h4>
+      <p style="font-size:.8rem;margin-bottom:0">All internal HTTP calls must carry <code>x-internal-secret</code>. Downstream services validate it via <code>InternalAuthMiddleware</code> and reject anything without it — even if the caller is within the cluster.</p>
+    </div>
+    <div style="background:var(--s1);border:1px solid var(--border);border-radius:var(--r);padding:.85rem 1rem">
+      <h4>User identity propagation</h4>
+      <p style="font-size:.8rem;margin-bottom:0">The gateway decodes the JWT once and forwards <code>x-user-id</code>, <code>x-user-role</code>, and <code>x-user-email</code> headers downstream. No downstream service decodes the JWT — they trust the gateway's forwarded headers.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ══════ SERVICE INVENTORY ══════ -->
+
+<section class="section" id="api-gateway">
+  <h2>API Gateway <span class="badge badge-violet" style="margin-left:.4rem">:8000</span></h2>
+  <p>The sole public entry point for all API traffic. Validates JWTs, caches session lookups in Redis, applies rate limiting, writes audit logs directly to the database, and reverse-proxies requests to downstream services.</p>
+
+  <div class="svc-grid">
+    <div class="svc-card c-gw">
+      <div class="svc-name">api-gateway</div>
+      <div class="svc-port">services/api-gateway/  ·  :8000</div>
+      <div class="svc-desc">JWT validation (httpOnly cookie + Bearer), Redis session cache, per-IP rate limiting, audit logging (fire-and-forget), HTTP proxy via <code>httpx.AsyncClient</code>.</div>
+      <div class="svc-tags">
+        <span class="badge badge-violet">FastAPI</span>
+        <span class="badge badge-teal">SQLAlchemy async</span>
+        <span class="badge badge-gray">httpx</span>
+      </div>
+    </div>
+    <div style="background:var(--s1);border:1px solid var(--border);border-radius:var(--r);padding:.85rem 1rem">
+      <h4>Health endpoints</h4>
+      <div style="font-family:var(--mono);font-size:.75rem;display:flex;flex-direction:column;gap:.3rem;color:var(--text)">
+        <div><span style="color:#2dd4bf">GET</span> <code>/health</code> — liveness probe</div>
+        <div><span style="color:#2dd4bf">GET</span> <code>/health/ready</code> — checks all 5 downstream services</div>
+      </div>
+      <div style="margin-top:.65rem">
+        <h4>Modules</h4>
+        <div style="font-family:var(--mono);font-size:.72rem;color:var(--text-mid);display:flex;flex-direction:column;gap:.18rem">
+          <div>middleware.py — SessionValidationMiddleware</div>
+          <div>audit/middleware.py — AuditMiddleware</div>
+          <div>audit/router.py — GET /api/admin/audit</div>
+          <div>proxy.py — forward() helper</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="section" id="auth-service">
+  <h2>Auth Service <span class="badge badge-blue" style="margin-left:.4rem">:8010</span></h2>
+  <p>Owns all user identity concerns: registration, login, session management, JWT issuance, RBAC (roles/permissions), OAuth providers, file uploads, and admin user management. Uses Alembic migrations on the <code>public</code> schema.</p>
+
+  <div class="svc-grid">
+    <div class="svc-card c-auth">
+      <div class="svc-name">auth-service</div>
+      <div class="svc-port">services/auth-service/  ·  :8010</div>
+      <div class="svc-desc">Email/password auth, Google OAuth 2.0, Azure AD SSO. JWT access (30 min) + refresh (7 days) tokens in httpOnly cookies. Redis-backed session cache.</div>
+      <div class="svc-tags">
+        <span class="badge badge-blue">FastAPI</span>
+        <span class="badge badge-teal">Alembic</span>
+        <span class="badge badge-gray">Redis</span>
+        <span class="badge badge-gray">Azure Blob</span>
+      </div>
+    </div>
+    <div class="svc-card c-auth" style="border-top-color:transparent">
+      <h4>Routers</h4>
+      <div style="font-family:var(--mono);font-size:.72rem;color:var(--text-mid);display:flex;flex-direction:column;gap:.2rem">
+        <div><code>/api/auth/*</code> — login, register, OAuth, tokens</div>
+        <div><code>/api/profile/*</code> — user profile CRUD</div>
+        <div><code>/api/auth/roles/*</code> — RBAC role management</div>
+        <div><code>/api/auth/permissions/*</code> — permission management</div>
+        <div><code>/api/admin/*</code> — admin user management</div>
+        <div><code>/api/uploads/*</code> — Azure Blob Storage</div>
+        <div><code>/api/auth/internal/*</code> — validate-session (internal only)</div>
+        <div style="color:var(--text-lo)">/api/auth/google/* (AUTH_GOOGLE_ENABLED)</div>
+        <div style="color:var(--text-lo)">/api/auth/azure/* (AUTH_AZURE_ENABLED)</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th>Auth Method</th><th>Env Flag</th><th>Dependencies</th></tr></thead>
+      <tbody>
+        <tr><td>Email / password</td><td><code>AUTH_EMAIL_ENABLED=true</code></td><td>PostgreSQL, Redis, notification-service</td></tr>
+        <tr><td>Google OAuth 2.0</td><td><code>AUTH_GOOGLE_ENABLED=true</code></td><td>Google Cloud Console, <code>GOOGLE_CLIENT_ID</code> + <code>SECRET</code></td></tr>
+        <tr><td>Azure AD</td><td><code>AUTH_AZURE_ENABLED=true</code></td><td>Azure App Registration, <code>AZURE_CLIENT_ID</code> + <code>SECRET</code> + <code>TENANT_ID</code></td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="section" id="chat-service">
+  <h2>Chat Service <span class="badge badge-teal" style="margin-left:.4rem">:8001</span></h2>
+  <p>Unified command + query handler for chat workloads. A single process runs the FastAPI HTTP server, a Kafka producer (command side), and a background Kafka consumer projector (query side). Alembic migrations are applied at startup.</p>
+
+  <div class="svc-grid">
+    <div class="svc-card c-cqrs">
+      <div class="svc-name">chat-service</div>
+      <div class="svc-port">services/chat-service/  ·  :8001</div>
+      <div class="svc-desc">Writes to <code>chat_write.chat_messages</code>, publishes to <code>chat.events</code>. The <code>chat-projector</code> consumer group updates the <code>chat_read</code> denormalised model asynchronously.</div>
+      <div class="svc-tags">
+        <span class="badge badge-teal">aiokafka</span>
+        <span class="badge badge-teal">Alembic</span>
+        <span class="badge badge-gray">SQLAlchemy async</span>
+      </div>
+    </div>
+    <div class="svc-card c-cqrs" style="border-top-color:transparent">
+      <h4>Endpoints</h4>
+      <div style="font-family:var(--mono);font-size:.72rem;color:var(--text-mid);display:flex;flex-direction:column;gap:.2rem">
+        <div><span class="m m-post">POST</span> /messages — create (→ 201)</div>
+        <div><span class="m m-post">POST</span> /messages/bulk — up to 1,000 (→ 202)</div>
+        <div><span class="m m-del">DEL</span> /messages/{id} — soft delete (→ 204)</div>
+        <div><span class="m m-get">GET</span> /sessions — list sessions</div>
+        <div><span class="m m-get">GET</span> /sessions/{id}/messages — history</div>
+        <div><span class="m m-get">GET</span> /messages/{id} — single message</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="section" id="plot-service">
+  <h2>Plot Service <span class="badge badge-teal" style="margin-left:.4rem">:8003</span></h2>
+  <p>Unified command + query handler for plot/scene workloads. Same architectural pattern as chat-service: single process with HTTP server, Kafka producer, and embedded <code>plot-projector</code> consumer. Uses a single <code>plot_unified</code> schema with both source-of-truth and projection fields co-located.</p>
+
+  <div class="svc-grid">
+    <div class="svc-card c-cqrs">
+      <div class="svc-name">plot-service</div>
+      <div class="svc-port">services/plot-service/  ·  :8003</div>
+      <div class="svc-desc">Writes to <code>plot_unified.plots</code>. Projector updates <code>element_count</code> and <code>version</code> in place. Bulk create accepts up to 500 plots per request (→ 202 Accepted).</div>
+      <div class="svc-tags">
+        <span class="badge badge-teal">aiokafka</span>
+        <span class="badge badge-teal">Alembic</span>
+        <span class="badge badge-gray">JSONB elements</span>
+      </div>
+    </div>
+    <div class="svc-card c-cqrs" style="border-top-color:transparent">
+      <h4>Endpoints</h4>
+      <div style="font-family:var(--mono);font-size:.72rem;color:var(--text-mid);display:flex;flex-direction:column;gap:.2rem">
+        <div><span class="m m-post">POST</span> /plots — create (→ 201 + version)</div>
+        <div><span class="m m-post">POST</span> /plots/bulk — up to 500 (→ 202)</div>
+        <div><span class="m m-put">PUT</span> /plots/{id} — update (→ version++)</div>
+        <div><span class="m m-del">DEL</span> /plots/{id} — soft delete (→ 204)</div>
+        <div><span class="m m-get">GET</span> /plots — list (paginated)</div>
+        <div><span class="m m-get">GET</span> /plots/search?q= — ILIKE name search</div>
+        <div><span class="m m-get">GET</span> /plots/{id} — full plot + elements</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="callout teal"><strong>Config limits:</strong> <code>max_plot_elements=10,000</code>, <code>default_page_size=20</code>, <code>max_page_size=100</code>.</div>
+</section>
+
+<section class="section" id="notification-svc">
+  <h2>Notification Service <span class="badge badge-green" style="margin-left:.4rem">:8012</span></h2>
+  <p>Stateless delivery service for transactional email (SendGrid) and SMS (Twilio). Internal callers (auth-service, api-gateway) use the <code>/api/email/*</code> endpoint with <code>x-internal-secret</code>. No database, no Celery — delivery is handled in-process with 3-attempt retry (1s / 2s / 4s backoff, 4xx no-retry).</p>
+
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th>Path</th><th>Auth</th><th>Integrations</th></tr></thead>
+      <tbody>
+        <tr><td><code>/api/email/send</code></td><td><code>x-internal-secret</code></td><td>SendGrid API · Jinja2 templates · 3-attempt retry</td></tr>
+        <tr><td><code>/api/notifications/*</code></td><td><code>x-user-id</code> (from gateway)</td><td>User-facing notification history</td></tr>
+        <tr><td><code>/api/notifications/send-sms</code></td><td><code>x-user-id</code></td><td>Twilio SMS</td></tr>
+        <tr><td><code>/health</code></td><td>none</td><td>Liveness probe</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="section" id="payment-svc">
+  <h2>Payment Service <span class="badge badge-gray" style="margin-left:.4rem">:8011</span></h2>
+  <p>Stateless placeholder service. No database, no Kafka. The <code>/payments/*</code> router is registered; business logic (Stripe integration) is not yet implemented. All requests authenticated via <code>x-internal-secret</code>.</p>
+</section>
+
+<!-- ══════ DATA LAYER ══════ -->
+
+<section class="section" id="data-layer">
+  <h2>PostgreSQL Schemas</h2>
+  <p>All services share a single PostgreSQL 16 + pgvector instance. Schemas are created once by <code>scripts/init-schemas.sql</code> (auto-run on first container start). Migrations within each schema are owned by the service that uses it.</p>
+
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th>Schema</th><th>Owner</th><th>Migration tool</th><th>Key tables</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><code>public</code></td>
+          <td>auth-service</td>
+          <td>Alembic (<code>db-migrate</code> init container)</td>
+          <td><code>users</code> · <code>profiles</code> · <code>sessions</code> · <code>roles</code> · <code>permissions</code> · <code>role_permissions</code> · <code>sheets</code> · <code>audit_logs</code> · <code>file_uploads</code> · <code>password_reset_tokens</code></td>
+        </tr>
+        <tr>
+          <td><code>chat_write</code></td>
+          <td>chat-service</td>
+          <td>Alembic (startup auto-migrate)</td>
+          <td><code>chat_sessions</code> · <code>chat_messages</code> — source of truth</td>
+        </tr>
+        <tr>
+          <td><code>chat_read</code></td>
+          <td>chat-service (projector)</td>
+          <td>Alembic (startup auto-migrate)</td>
+          <td><code>chat_sessions</code> (+ <code>message_count</code>, <code>last_message_preview</code>) · <code>chat_messages</code> — denormalised read model</td>
+        </tr>
+        <tr>
+          <td><code>plot_unified</code></td>
+          <td>plot-service</td>
+          <td>Alembic (startup auto-migrate)</td>
+          <td><code>plots</code> — write + projection fields co-located (<code>element_count</code>, <code>version</code>)</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Schema initialisation SQL</h3>
+  <pre><code>-- scripts/init-schemas.sql — runs via docker-entrypoint-initdb.d on first start
+CREATE SCHEMA IF NOT EXISTS chat_write;
+CREATE SCHEMA IF NOT EXISTS chat_read;
+CREATE SCHEMA IF NOT EXISTS plot_unified;</code></pre>
+
+  <h3>Backfill: monolith sheets → CQRS</h3>
+  <pre><code>-- One-time migration from legacy sheets table to plot_unified
+INSERT INTO plot_unified.plots (id, user_id, name, sheet_w, sheet_d, grid_step, elements, created_at, updated_at)
+SELECT id, user_id, name, sheet_w, sheet_d, grid_step, elements, created_at, updated_at
+FROM   public.sheets
+WHERE  is_deleted = false;</code></pre>
+</section>
+
+<section class="section" id="redis">
+  <h2>Redis</h2>
+  <p>Redis 7 (password-protected in production) is used by two services for two distinct purposes. No Celery — email delivery moved to notification-service.</p>
+
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th>Consumer</th><th>Use</th><th>Key pattern</th></tr></thead>
+      <tbody>
+        <tr><td>api-gateway</td><td>Session validation cache (avoids hitting auth-service on every request)</td><td><code>session:{token_hash}</code></td></tr>
+        <tr><td>api-gateway</td><td>Per-IP rate limiting counters</td><td><code>rl:{ip}:{endpoint}</code></td></tr>
+        <tr><td>auth-service</td><td>Active session store + revocation list</td><td><code>session:{token_hash}</code></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="callout blue"><strong>Graceful degradation:</strong> if Redis is unavailable, the gateway falls back to a direct HTTP call to auth-service for session validation rather than failing the request.</div>
+</section>
+
+<!-- ══════ KAFKA / CQRS ══════ -->
+
+<section class="section" id="kafka">
+  <h2>Kafka Topics &amp; CQRS Pattern</h2>
+  <p>Four topics are created once by the <code>kafka-init</code> one-off container before any services start. Partition keys preserve ordering per session or user without global synchronisation.</p>
+
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th>Topic</th><th>Partitions</th><th>Retention</th><th>Partition key</th><th>Publisher</th><th>Consumer group</th></tr></thead>
+      <tbody>
+        <tr><td><code>chat.events</code></td><td>4</td><td>7 days</td><td><code>session_id</code></td><td>chat-service</td><td>chat-projector</td></tr>
+        <tr><td><code>chat.bulk.commands</code></td><td>2</td><td>1 day</td><td><code>session_id</code></td><td>chat-service</td><td>chat-projector</td></tr>
+        <tr><td><code>plot.events</code></td><td>4</td><td>30 days</td><td><code>user_id</code></td><td>plot-service</td><td>plot-projector</td></tr>
+        <tr><td><code>plot.bulk.commands</code></td><td>2</td><td>1 day</td><td><code>user_id</code></td><td>plot-service</td><td>plot-projector</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>CQRS flow — chat example</h3>
+  <div class="kf-flow">
+    <div class="kf-box">
+      <div style="font-family:var(--mono);font-size:.75rem;color:#2dd4bf;margin-bottom:.3rem">POST /messages</div>
+      <div style="font-size:.78rem;color:var(--text)">1. Validate command<br>2. INSERT → <code>chat_write.chat_messages</code><br>3. Produce event → <code>chat.events</code><br>4. Return 201 + {id}</div>
+    </div>
+    <div class="kf-mid">
+      <svg width="32" height="60" viewBox="0 0 32 60"><line x1="16" y1="0" x2="16" y2="60" stroke="#C2872B" stroke-width="1.5" stroke-dasharray="4,3" style="animation:dash-flow 1s linear infinite"/><polygon points="10,54 16,60 22,54" fill="#C2872B"/></svg>
+      <div class="kf-topic">Kafka async</div>
+    </div>
+    <div class="kf-box">
+      <div style="font-family:var(--mono);font-size:.75rem;color:#C2872B;margin-bottom:.3rem">consumer: chat-projector</div>
+      <div style="font-size:.78rem;color:var(--text)">1. Consume event<br>2. UPSERT → <code>chat_read.chat_messages</code><br>3. UPDATE <code>chat_read.chat_sessions</code> stats<br>4. Commit offset</div>
+    </div>
+  </div>
+
+  <h3>Events published</h3>
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th>Event type</th><th>Topic</th><th>Trigger</th></tr></thead>
+      <tbody>
+        <tr><td><code>chat.message.created</code></td><td><code>chat.events</code></td><td>POST /messages</td></tr>
+        <tr><td><code>chat.bulk.messages.created</code></td><td><code>chat.bulk.commands</code></td><td>POST /messages/bulk</td></tr>
+        <tr><td><code>chat.message.deleted</code></td><td><code>chat.events</code></td><td>DELETE /messages/{id}</td></tr>
+        <tr><td><code>plot.created</code></td><td><code>plot.events</code></td><td>POST /plots</td></tr>
+        <tr><td><code>plot.updated</code></td><td><code>plot.events</code></td><td>PUT /plots/{id}</td></tr>
+        <tr><td><code>plot.deleted</code></td><td><code>plot.events</code></td><td>DELETE /plots/{id}</td></tr>
+        <tr><td><code>plot.bulk.created</code></td><td><code>plot.bulk.commands</code></td><td>POST /plots/bulk</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ══════ SECURITY ══════ -->
+
+<section class="section" id="security">
+  <h2>Security Architecture</h2>
+
+  <h3>Request authentication chain</h3>
+  <div class="chain">
+    <div class="chain-step">Browser sends<br><code>access_token</code> cookie<br>or <code>Authorization: Bearer</code></div>
+    <div class="chain-arrow">→</div>
+    <div class="chain-step" style="border-color:rgba(124,58,237,.4)">API Gateway<br><code>SessionValidationMiddleware</code><br>decode JWT · check Redis cache<br>fallback → auth-service HTTP</div>
+    <div class="chain-arrow">→</div>
+    <div class="chain-step">Inject headers<br><code>x-user-id</code><br><code>x-user-role</code><br><code>x-user-email</code></div>
+    <div class="chain-arrow">→</div>
+    <div class="chain-step" style="border-color:rgba(13,148,136,.4)">Downstream service<br>trusts gateway headers<br>validates <code>x-internal-secret</code><br>no JWT re-decode</div>
+  </div>
+
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th>Mechanism</th><th>Where</th><th>Purpose</th></tr></thead>
+      <tbody>
+        <tr><td>JWT (HS256)</td><td>API Gateway (decode only)</td><td>User identity, expiry, role claim</td></tr>
+        <tr><td>httpOnly cookie <code>access_token</code></td><td>Browser ↔ API Gateway</td><td>XSS-resistant token transport</td></tr>
+        <tr><td>Refresh token (httpOnly)</td><td>Browser ↔ auth-service</td><td>Silent re-auth, 7-day lifetime</td></tr>
+        <tr><td><code>x-internal-secret</code> header</td><td>All service-to-service calls</td><td>Prevent direct pod access bypass</td></tr>
+        <tr><td><code>x-user-id</code> / <code>x-user-role</code></td><td>Gateway → downstream</td><td>Identity propagation without JWT re-decode</td></tr>
+        <tr><td>Redis session cache</td><td>API Gateway</td><td>Fast-path session validation (avoids auth-service round-trip)</td></tr>
+        <tr><td>Rate limiting</td><td>API Gateway middleware</td><td>5/min login · 3/min register · 3/min password reset</td></tr>
+        <tr><td>CORS</td><td>All services</td><td>Configurable via <code>CORS_ORIGINS</code> JSON array</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Audit logging</h3>
+  <p>The API Gateway owns all audit persistence. <code>AuditMiddleware</code> calls <code>log_action()</code> as a fire-and-forget coroutine on every authenticated request. The <code>audit_admin_router</code> serves <code>GET /api/admin/audit</code> directly from the gateway's own DB connection pool (<code>pool_size=5</code>, <code>max_overflow=10</code>). Auth-service retains only <code>/api/auth/internal/validate-session</code> — it no longer writes or reads audit logs.</p>
+</section>
+
+<!-- ══════ ROUTING ══════ -->
+
+<section class="section" id="routing">
+  <h2>API Gateway Routing</h2>
+  <p>The gateway proxies all paths except <code>/api/admin/audit</code> (served locally). Path prefix determines the destination; the HTTP method determines write vs. read intent within the same service.</p>
+
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th>Path pattern</th><th>Methods</th><th>Routes to</th></tr></thead>
+      <tbody>
+        <tr><td><code>/api/auth/*</code></td><td>ALL</td><td>auth-service :8010</td></tr>
+        <tr><td><code>/api/profile/*</code></td><td>ALL</td><td>auth-service :8010</td></tr>
+        <tr><td><code>/api/admin/users/*</code></td><td>ALL</td><td>auth-service :8010</td></tr>
+        <tr><td><code>/api/admin/audit</code></td><td><span class="m m-get">GET</span></td><td><strong>api-gateway (local DB — no proxy)</strong></td></tr>
+        <tr><td><code>/api/uploads/*</code></td><td>ALL</td><td>auth-service :8010</td></tr>
+        <tr><td><code>/api/v1/chat/messages</code></td><td><span class="m m-post">POST</span></td><td>chat-service :8001</td></tr>
+        <tr><td><code>/api/v1/chat/messages/bulk</code></td><td><span class="m m-post">POST</span></td><td>chat-service :8001</td></tr>
+        <tr><td><code>/api/v1/chat/messages/{id}</code></td><td><span class="m m-del">DEL</span></td><td>chat-service :8001</td></tr>
+        <tr><td><code>/api/v1/chat/sessions</code></td><td><span class="m m-get">GET</span></td><td>chat-service :8001</td></tr>
+        <tr><td><code>/api/v1/chat/sessions/{id}/messages</code></td><td><span class="m m-get">GET</span></td><td>chat-service :8001</td></tr>
+        <tr><td><code>/api/v1/plots</code></td><td><span class="m m-post">POST</span> <span class="m m-get">GET</span></td><td>plot-service :8003</td></tr>
+        <tr><td><code>/api/v1/plots/bulk</code></td><td><span class="m m-post">POST</span></td><td>plot-service :8003</td></tr>
+        <tr><td><code>/api/v1/plots/{id}</code></td><td><span class="m m-put">PUT</span> <span class="m m-del">DEL</span> <span class="m m-get">GET</span></td><td>plot-service :8003</td></tr>
+        <tr><td><code>/api/v1/plots/search</code></td><td><span class="m m-get">GET</span></td><td>plot-service :8003</td></tr>
+        <tr><td><code>/api/payments/*</code></td><td>ALL</td><td>payment-service :8011</td></tr>
+        <tr><td><code>/api/notifications/*</code></td><td>ALL</td><td>notification-service :8012</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ══════ DEPLOYMENT ══════ -->
+
+<section class="section" id="deployment">
+  <h2>Deployment</h2>
+
+  <h3>Docker Compose stacks</h3>
+  <div class="deploy-grid">
+    <div class="deploy-card">
+      <div class="deploy-title">docker-compose.dev.yml</div>
+      <div class="deploy-sub">Local development — hot-reload, full tooling</div>
+      <ul class="deploy-list">
+        <li>Source volume-mounted for all services</li>
+        <li>DEBUG=true, Swagger enabled</li>
+        <li>All service ports exposed to host</li>
+        <li>pgAdmin :5050, Kafka UI :8090, Redis Commander :8081</li>
+        <li>Optional Redis password (empty = no auth)</li>
+      </ul>
+    </div>
+    <div class="deploy-card">
+      <div class="deploy-title">docker-compose.yml</div>
+      <div class="deploy-sub">Full production stack — immutable images</div>
+      <ul class="deploy-list">
+        <li>No source volume mounts</li>
+        <li>DEBUG=false, Swagger disabled</li>
+        <li>Internal services use expose-only (no host ports)</li>
+        <li>CPU + memory limits on all services</li>
+        <li>Redis password required</li>
+      </ul>
+    </div>
+    <div class="deploy-card">
+      <div class="deploy-title">Kubernetes (k8s/)</div>
+      <div class="deploy-sub">Namespace: plots-system</div>
+      <ul class="deploy-list">
+        <li>StatefulSets: zookeeper, kafka, postgres, redis</li>
+        <li>Deployments: 6 application services + frontend</li>
+        <li>HPAs on all deployments</li>
+        <li>kafka-init Job creates topics once</li>
+        <li>ConfigMap + Secrets for env injection</li>
+      </ul>
+    </div>
+  </div>
+
+  <h3>Service startup order</h3>
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th>Wave</th><th>Services</th><th>Wait condition</th></tr></thead>
+      <tbody>
+        <tr><td>1</td><td>PostgreSQL, Zookeeper</td><td>Health probes pass</td></tr>
+        <tr><td>2</td><td>Redis, Kafka</td><td>PostgreSQL healthy; Kafka waits for Zookeeper</td></tr>
+        <tr><td>3</td><td><code>db-migrate</code> (init container)</td><td>PostgreSQL healthy — runs Alembic public schema, then exits</td></tr>
+        <tr><td>3</td><td><code>kafka-init</code> (one-off job)</td><td>Kafka healthy — creates 4 topics, then exits</td></tr>
+        <tr><td>4</td><td>auth-service, notification-service, payment-service</td><td>db-migrate completed</td></tr>
+        <tr><td>5</td><td>chat-service, plot-service</td><td>Kafka healthy + kafka-init completed; run Alembic at startup</td></tr>
+        <tr><td>6</td><td>api-gateway</td><td>All downstream services started</td></tr>
+        <tr><td>7</td><td>Frontend (Next.js + Nginx)</td><td>api-gateway started</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Horizontal Pod Autoscaling</h3>
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th>Service</th><th>Min</th><th>Max</th><th>CPU trigger</th><th>Mem trigger</th></tr></thead>
+      <tbody>
+        <tr><td>chat-service</td><td>3</td><td>20</td><td>70%</td><td>80%</td></tr>
+        <tr><td>plot-service</td><td>3</td><td>20</td><td>70%</td><td>80%</td></tr>
+        <tr><td>auth-service</td><td>2</td><td>10</td><td>70%</td><td>80%</td></tr>
+        <tr><td>notification-service</td><td>2</td><td>8</td><td>70%</td><td>80%</td></tr>
+        <tr><td>api-gateway</td><td>2</td><td>—</td><td>manual</td><td>—</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Image build &amp; push</h3>
+  <pre><code># 6 images — one per service (frontend + 5 backend)
+for svc in api-gateway auth-service chat-service plot-service payment-service notification-service; do
+  docker build -t ghcr.io/&lt;owner&gt;/plots/$svc:latest services/$svc/
+  docker push ghcr.io/&lt;owner&gt;/plots/$svc:latest
+done
+
+# Frontend
+docker build -t ghcr.io/&lt;owner&gt;/plots/app:latest -f frontend/Dockerfile .
+docker push ghcr.io/&lt;owner&gt;/plots/app:latest</code></pre>
+</section>
+
+<!-- ══════ ENV VARS ══════ -->
+
+<section class="section" id="env-vars">
+  <h2>Environment Variables</h2>
+  <p>Copy <code>.env.example</code> to <code>.env</code> at the project root. All services consume their variables from their own <code>.env</code> file (loaded via <code>env_file</code> in Docker Compose) or from a Kubernetes ConfigMap + Secret.</p>
+
+  <h3>Required (no defaults in production)</h3>
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th>Variable</th><th>Used by</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr><td><code>SECRET_KEY</code></td><td>api-gateway, auth-service</td><td>JWT signing key — <code>python -c "import secrets; print(secrets.token_hex(32))"</code></td></tr>
+        <tr><td><code>INTERNAL_SERVICE_SECRET</code></td><td>all services</td><td>Service-to-service shared secret for <code>x-internal-secret</code> header</td></tr>
+        <tr><td><code>POSTGRES_USER / PASSWORD / DB</code></td><td>all services with DB</td><td>PostgreSQL credentials; also used for container init</td></tr>
+        <tr><td><code>REDIS_PASSWORD</code></td><td>api-gateway, auth-service</td><td>Leave empty in dev to disable Redis auth</td></tr>
+        <tr><td><code>SENDGRID_API_KEY</code></td><td>notification-service</td><td>Required if email features are used</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Service URLs (Docker Compose sets these automatically)</h3>
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th>Variable</th><th>Dev value</th><th>Used by</th></tr></thead>
+      <tbody>
+        <tr><td><code>AUTH_SERVICE_URL</code></td><td><code>http://auth-service:8010</code></td><td>api-gateway</td></tr>
+        <tr><td><code>CHAT_COMMAND_URL</code></td><td><code>http://chat-service:8001</code></td><td>api-gateway</td></tr>
+        <tr><td><code>CHAT_QUERY_URL</code></td><td><code>http://chat-service:8001</code></td><td>api-gateway</td></tr>
+        <tr><td><code>PLOT_COMMAND_URL</code></td><td><code>http://plot-service:8003</code></td><td>api-gateway</td></tr>
+        <tr><td><code>PLOT_QUERY_URL</code></td><td><code>http://plot-service:8003</code></td><td>api-gateway</td></tr>
+        <tr><td><code>PAYMENT_SERVICE_URL</code></td><td><code>http://payment-service:8011</code></td><td>api-gateway</td></tr>
+        <tr><td><code>NOTIFICATION_SERVICE_URL</code></td><td><code>http://notification-service:8012</code></td><td>api-gateway</td></tr>
+        <tr><td><code>EMAIL_SERVICE_URL</code></td><td><code>http://notification-service:8012</code></td><td>auth-service</td></tr>
+        <tr><td><code>KAFKA_BOOTSTRAP_SERVERS</code></td><td><code>kafka:9092</code></td><td>chat-service, plot-service</td></tr>
+        <tr><td><code>BACKEND_INTERNAL_URL</code></td><td><code>http://api-gateway:8000</code></td><td>frontend (Next.js server-side)</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Optional</h3>
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th>Variable</th><th>Default</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td><code>AUTH_EMAIL_ENABLED</code></td><td>true</td><td>Email/password login</td></tr>
+        <tr><td><code>AUTH_GOOGLE_ENABLED</code></td><td>false</td><td>Google OAuth 2.0 SSO</td></tr>
+        <tr><td><code>AUTH_AZURE_ENABLED</code></td><td>false</td><td>Azure AD SSO</td></tr>
+        <tr><td><code>ACCESS_TOKEN_EXPIRE_MINUTES</code></td><td>30</td><td>JWT access token lifetime</td></tr>
+        <tr><td><code>REFRESH_TOKEN_EXPIRE_DAYS</code></td><td>7</td><td>JWT refresh token lifetime</td></tr>
+        <tr><td><code>FROM_EMAIL</code></td><td>noreply@yourapp.com</td><td>SendGrid sender identity</td></tr>
+        <tr><td><code>TWILIO_ACCOUNT_SID / AUTH_TOKEN / FROM_NUMBER</code></td><td>—</td><td>SMS notifications</td></tr>
+        <tr><td><code>AZURE_STORAGE_CONNECTION_STRING</code></td><td>—</td><td>Azure Blob Storage for file uploads</td></tr>
+        <tr><td><code>AZURE_STORAGE_CONTAINER</code></td><td>uploads</td><td>Blob container name</td></tr>
+        <tr><td><code>CORS_ORIGINS</code></td><td><code>["http://localhost"]</code></td><td>JSON array of allowed origins</td></tr>
+        <tr><td><code>RATE_LIMIT_LOGIN</code></td><td>5/minute</td><td>Per-IP login throttle</td></tr>
+        <tr><td><code>RATE_LIMIT_REGISTER</code></td><td>3/minute</td><td>Per-IP registration throttle</td></tr>
+        <tr><td><code>NEXT_PUBLIC_AUTH_GOOGLE_ENABLED</code></td><td>false</td><td>Show Google SSO button in frontend (build-time)</td></tr>
+        <tr><td><code>NEXT_PUBLIC_AUTH_AZURE_ENABLED</code></td><td>false</td><td>Show Azure SSO button in frontend (build-time)</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="callout red"><strong>Note:</strong> <code>NEXT_PUBLIC_*</code> variables are inlined into the browser JS bundle at <code>bun build</code> time. Changing them requires a full frontend image rebuild.</div>
+</section>
+
+</main>
+</div>
+
+<script>
+(function(){
+  var links=document.querySelectorAll('.nav-link');
+  var sections=document.querySelectorAll('.section,[id="overview"]');
+  var io=new IntersectionObserver(function(entries){
+    entries.forEach(function(e){
+      if(e.isIntersecting){
+        links.forEach(function(l){l.classList.remove('active')});
+        var a=document.querySelector('.nav-link[href="#'+e.target.id+'"]');
+        if(a){a.classList.add('active');a.scrollIntoView({block:'nearest'})}
+      }
+    });
+  },{rootMargin:'-5% 0px -70% 0px',threshold:0});
+  sections.forEach(function(s){io.observe(s)});
+})();
+</script>
+</body>
+</html>

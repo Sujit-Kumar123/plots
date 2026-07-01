@@ -1,0 +1,62 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: kafka-init
+  namespace: plots-system
+  annotations:
+    # Re-run manually if topics need to be recreated:
+    #   kubectl delete job kafka-init -n plots-system
+    #   kubectl apply -f k8s/jobs/kafka-init.yaml
+spec:
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: kafka-init
+          image: confluentinc/cp-kafka:7.6.0
+          command:
+            - /bin/bash
+            - -c
+            - |
+              set -e
+              BOOTSTRAP=kafka:9092
+
+              create_topic() {
+                kafka-topics.sh --bootstrap-server "$BOOTSTRAP" \
+                  --create --if-not-exists \
+                  --topic "$1" \
+                  --partitions "$2" \
+                  --replication-factor "$3" \
+                  "${@:4}"
+                echo "Topic $1: OK"
+              }
+
+              # Chat domain
+              create_topic chat.events         12 3 \
+                --config retention.ms=604800000 \
+                --config min.insync.replicas=2
+
+              create_topic chat.bulk.commands   6 3 \
+                --config retention.ms=86400000 \
+                --config min.insync.replicas=2
+
+              # Plot domain
+              create_topic plot.events         12 3 \
+                --config retention.ms=2592000000 \
+                --config min.insync.replicas=2
+
+              create_topic plot.bulk.commands   6 3 \
+                --config retention.ms=86400000 \
+                --config min.insync.replicas=2
+
+              echo ""
+              echo "All topics created:"
+              kafka-topics.sh --bootstrap-server "$BOOTSTRAP" --list
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "256Mi"
+              cpu: "500m"
+  backoffLimit: 4

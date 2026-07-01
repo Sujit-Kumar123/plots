@@ -81,10 +81,14 @@ services:
     entrypoint: ["/bin/bash", "-c"]
     command:
       - |
-        kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic chat.events         --partitions 4 --replication-factor 1
-        kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic chat.bulk.commands  --partitions 2 --replication-factor 1
-        kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic plot.events         --partitions 4 --replication-factor 1
-        kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic plot.bulk.commands  --partitions 2 --replication-factor 1
+        kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic chat.events              --partitions 4 --replication-factor 1
+        kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic chat.bulk.commands       --partitions 2 --replication-factor 1
+        kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic plot.events              --partitions 4 --replication-factor 1
+        kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic plot.bulk.commands       --partitions 2 --replication-factor 1
+        kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic chat.events.dlq          --partitions 1 --replication-factor 1
+        kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic chat.bulk.commands.dlq   --partitions 1 --replication-factor 1
+        kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic plot.events.dlq          --partitions 1 --replication-factor 1
+        kafka-topics --bootstrap-server kafka:9092 --create --if-not-exists --topic plot.bulk.commands.dlq   --partitions 1 --replication-factor 1
         echo "Topics created."
     restart: "no"
 
@@ -109,41 +113,27 @@ services:
     ports:
       - "8000:8000"
     depends_on:
-      - chat-command
-      - chat-query
-      - plot-command
-      - plot-query
+      chat-service:
+        condition: service_healthy
+      plot-service:
+        condition: service_healthy
     environment:
       SECRET_KEY: ${SECRET_KEY:-dev-secret-change-me}
-      CHAT_COMMAND_URL: http://chat-command:8001
-      CHAT_QUERY_URL: http://chat-query:8002
-      PLOT_COMMAND_URL: http://plot-command:8003
-      PLOT_QUERY_URL: http://plot-query:8004
+      CHAT_COMMAND_URL: http://chat-service:8001
+      CHAT_QUERY_URL: http://chat-service:8001
+      PLOT_COMMAND_URL: http://plot-service:8003
+      PLOT_QUERY_URL: http://plot-service:8003
       DEBUG: "true"
     volumes:
       - ./services/api-gateway/app:/app/app
 
-  chat-command:
+  chat-service:
     <<: *service-defaults
     build:
-      context: ./services/chat-command
+      context: ./services/chat-service
       dockerfile: Dockerfile
-    depends_on:
-      postgres:
-        condition: service_healthy
-      kafka:
-        condition: service_healthy
-    environment:
-      <<: [*db-env, *kafka-env]
-      DEBUG: "true"
-    volumes:
-      - ./services/chat-command/app:/app/app
-
-  chat-query:
-    <<: *service-defaults
-    build:
-      context: ./services/chat-query
-      dockerfile: Dockerfile
+    ports:
+      - "8001:8001"
     depends_on:
       postgres:
         condition: service_healthy
@@ -151,33 +141,27 @@ services:
         condition: service_healthy
       kafka-init:
         condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "python3 -c \"import urllib.request; urllib.request.urlopen('http://localhost:8001/health/ready')\""]
+      interval: 15s
+      timeout: 5s
+      retries: 15
+      start_period: 90s
     environment:
       <<: [*db-env, *kafka-env]
       DEBUG: "true"
     volumes:
-      - ./services/chat-query/app:/app/app
+      - ./services/chat-service/app:/app/app
 
-  plot-command:
+  # plot-service: unified command + query handler (runs producer + consumer)
+
+  plot-service:
     <<: *service-defaults
     build:
-      context: ./services/plot-command
+      context: ./services/plot-service
       dockerfile: Dockerfile
-    depends_on:
-      postgres:
-        condition: service_healthy
-      kafka:
-        condition: service_healthy
-    environment:
-      <<: [*db-env, *kafka-env]
-      DEBUG: "true"
-    volumes:
-      - ./services/plot-command/app:/app/app
-
-  plot-query:
-    <<: *service-defaults
-    build:
-      context: ./services/plot-query
-      dockerfile: Dockerfile
+    ports:
+      - "8003:8003"
     depends_on:
       postgres:
         condition: service_healthy
@@ -185,11 +169,17 @@ services:
         condition: service_healthy
       kafka-init:
         condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "python3 -c \"import urllib.request; urllib.request.urlopen('http://localhost:8003/health/ready')\""]
+      interval: 15s
+      timeout: 5s
+      retries: 15
+      start_period: 90s
     environment:
       <<: [*db-env, *kafka-env]
       DEBUG: "true"
     volumes:
-      - ./services/plot-query/app:/app/app
+      - ./services/plot-service/app:/app/app
 
 networks:
   cqrs_net:

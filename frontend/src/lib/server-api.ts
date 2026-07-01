@@ -1,6 +1,7 @@
 import { cookies, headers } from "next/headers"
 
 const BACKEND = process.env.BACKEND_INTERNAL_URL ?? "http://localhost:8000"
+const CQRS_GATEWAY = process.env.CQRS_GATEWAY_URL ?? "http://api-gateway:8000"
 
 interface ServerApiResponse<T> {
   success: boolean
@@ -37,6 +38,28 @@ async function getAuthHeaders(): Promise<HeadersInit> {
     ...(token ? { Cookie: `access_token=${token}` } : {}),
     ...(clientIp ? { "X-Real-IP": clientIp } : {}),
   }
+}
+
+// Calls the CQRS api-gateway directly. Returns raw JSON (no {success,data} wrapper).
+export async function cqrsFetch<T>(
+  path: string,
+  { method = "GET", body, next }: FetchOptions = {},
+): Promise<T | null> {
+  const res = await fetch(`${CQRS_GATEWAY}${path}`, {
+    method,
+    headers: await getAuthHeaders(),
+    ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+    ...(next ? { next } : { cache: "no-store" }),
+  })
+
+  if (res.status === 204) return null
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err?.detail ?? err?.message ?? `Request failed (${res.status})`)
+  }
+
+  return res.json() as Promise<T>
 }
 
 export async function serverFetch<T>(

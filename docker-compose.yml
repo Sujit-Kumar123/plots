@@ -1,52 +1,47 @@
-name: mvp
+version: "3.9"
+
+# Full microservices production stack
+#
+# - No source volume mounts — images are immutable build artifacts
+# - DEBUG=false, Swagger/docs disabled on all services
+# - Internal services use 'expose' only — nginx (port 80) is the sole public ingress
+# - Next.js standalone build served via nginx (docker/prod/Dockerfile.frontend)
+# - CPU + memory limits on all application services
+# - restart: always on all long-running services
+#
+# Usage:
+#   docker compose up --build    # build all images and start
+#   docker compose up            # start (images already built)
+#   docker compose down          # stop containers
+#   docker compose down -v       # stop + remove named volumes (DESTRUCTIVE)
+#
+# Required env vars (no insecure defaults in production):
+#   POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_DB
+#   REDIS_PASSWORD, SECRET_KEY, INTERNAL_SERVICE_SECRET
+#   SENDGRID_API_KEY, FROM_EMAIL
+#   APP_URL (e.g. https://yourapp.com)
+
+x-service-defaults: &service-defaults
+  restart: always
+  networks:
+    - prod_net
+
+x-db-env: &db-env
+  DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+
+x-kafka-env: &kafka-env
+  KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+
+x-internal-secret-env: &internal-secret-env
+  INTERNAL_SERVICE_SECRET: ${INTERNAL_SERVICE_SECRET}
 
 services:
 
-  # ── App: FastAPI + Next.js + Nginx (single container) ────────────────────────
-  app:
-    build:
-      context: .
-      dockerfile: docker/prod/Dockerfile
-    container_name: mvp-app
-    restart: unless-stopped
-    env_file:
-      - .env
-    environment:
-      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
-      REDIS_URL: redis://${REDIS_PASSWORD:+:${REDIS_PASSWORD}@}redis:6379/${REDIS_DB:-0}
-    ports:
-      - "80:80"
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    networks:
-      - app_network
+  # ── Shared infrastructure ──────────────────────────────────────────────────
 
-  # ── Celery worker ──────────────────────────────────────────────────────────
-  worker:
-    build:
-      context: .
-      dockerfile: docker/prod/Dockerfile.worker
-    container_name: mvp-worker
-    restart: unless-stopped
-    env_file:
-      - .env
-    environment:
-      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
-      REDIS_URL: redis://${REDIS_PASSWORD:+:${REDIS_PASSWORD}@}redis:6379/${REDIS_DB:-0}
-    depends_on:
-      redis:
-        condition: service_healthy
-    networks:
-      - app_network
-
-  # ── PostgreSQL ──────────────────────────────────────────────────────────────
   postgres:
+    <<: *service-defaults
     image: pgvector/pgvector:pg16
-    container_name: mvp-postgres
-    restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
@@ -54,44 +49,350 @@ services:
     expose:
       - "5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - prod_postgres_data:/var/lib/postgresql/data
+      - ./scripts/init-schemas.sql:/docker-entrypoint-initdb.d/init-schemas.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 10s
       timeout: 5s
-      retries: 5
-    networks:
-      - app_network
+      retries: 10
+      start_period: 20s
+    deploy:
+      resources:
+        limits:
+          cpus: "2"
+          memory: 1G
 
-  # ── Redis ───────────────────────────────────────────────────────────────────
   redis:
+    <<: *service-defaults
     image: redis:7.2-alpine
-    container_name: mvp-redis
-    restart: unless-stopped
-    entrypoint: >
-      sh -c "
-        ARGS=\"--port 6379 --save 60 1 --loglevel warning\";
-        if [ -n \"$$REDIS_PASSWORD\" ]; then
-          ARGS=\"$$ARGS --requirepass $$REDIS_PASSWORD\";
-        fi;
-        exec redis-server $$ARGS
-      "
+    command: >
+      sh -c "redis-server --port 6379 --save 60 1 --loglevel warning --requirepass $${REDIS_PASSWORD}"
     expose:
       - "6379"
     volumes:
-      - redis_data:/data
+      - prod_redis_data:/data
     healthcheck:
-      test: ["CMD", "sh", "-c", "redis-cli -p 6379 ${REDIS_PASSWORD:+-a $REDIS_PASSWORD} ping"]
+      test: ["CMD", "redis-cli", "-p", "6379", "-a", "${REDIS_PASSWORD}", "ping"]
       interval: 10s
       timeout: 3s
       retries: 5
-    networks:
-      - app_network
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256M
 
-volumes:
-  postgres_data:
-  redis_data:
+  zookeeper:
+    <<: *service-defaults
+    image: confluentinc/cp-zookeeper:7.6.0
+    expose:
+      - "2181"
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    volumes:
+      - prod_zookeeper_data:/var/lib/zookeeper
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256M
+
+  kafka:
+    <<: *service-defaults
+    image: confluentinc/cp-kafka:7.6.0
+    depends_on:
+      - zookeeper
+    expose:
+      - "9092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_DEFAULT_REPLICATION_FACTOR: 1
+      KAFKA_MIN_INSYNC_REPLICAS: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+    volumes:
+      - prod_kafka_data:/var/lib/kafka/data
+    healthcheck:
+      test: ["CMD-SHELL", "kafka-broker-api-versions --bootstrap-server localhost:9092"]
+      interval: 10s
+      timeout: 10s
+      retries: 15
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 512M
+
+  kafka-init:
+    <<: *service-defaults
+    image: confluentinc/cp-kafka:7.6.0
+    depends_on:
+      kafka:
+        condition: service_healthy
+    entrypoint: ["/bin/bash", "-c"]
+    command:
+      - |
+        kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic chat.events        --partitions 4 --replication-factor 1
+        kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic chat.bulk.commands --partitions 2 --replication-factor 1
+        kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic plot.events        --partitions 4 --replication-factor 1
+        kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic plot.bulk.commands --partitions 2 --replication-factor 1
+        echo "Kafka topics created."
+    restart: "no"
+
+  # ── Auth-service DB migrations (init container, exits after completion) ────
+
+  db-migrate:
+    <<: *service-defaults
+    build:
+      context: ./services/auth-service
+      dockerfile: Dockerfile
+    command: ["uv", "run", "alembic", "upgrade", "head"]
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  # ── Frontend ──────────────────────────────────────────────────────────────
+  # Next.js standalone build; sole public ingress on port 3000 (behind a
+  # reverse proxy / CDN in real deployments). Proxies /api/* → api-gateway.
+
+  app:
+    <<: *service-defaults
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_AUTH_GOOGLE_ENABLED: ${NEXT_PUBLIC_AUTH_GOOGLE_ENABLED:-false}
+        NEXT_PUBLIC_AUTH_AZURE_ENABLED: ${NEXT_PUBLIC_AUTH_AZURE_ENABLED:-false}
+    ports:
+      - "${APP_PORT:-3000}:3000"
+    env_file:
+      - path: ./frontend/.env.local
+        required: false
+    environment:
+      BACKEND_INTERNAL_URL: http://api-gateway:8000
+    depends_on:
+      api-gateway:
+        condition: service_started
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 512M
+
+  # ── API Gateway ────────────────────────────────────────────────────────────
+
+  api-gateway:
+    <<: *service-defaults
+    build:
+      context: ./services/api-gateway
+      dockerfile: Dockerfile
+    expose:
+      - "8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      auth-service:
+        condition: service_started
+      chat-service:
+        condition: service_started
+      plot-service:
+        condition: service_started
+      payment-service:
+        condition: service_started
+      notification-service:
+        condition: service_started
+    env_file:
+      - path: ./services/api-gateway/.env
+        required: false
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/${REDIS_DB:-0}
+      SECRET_KEY: ${SECRET_KEY}
+      DEBUG: "false"
+      <<: *internal-secret-env
+      CHAT_COMMAND_URL: http://chat-service:8001
+      CHAT_QUERY_URL: http://chat-service:8001
+      PLOT_COMMAND_URL: http://plot-service:8003
+      PLOT_QUERY_URL: http://plot-service:8003
+      AUTH_SERVICE_URL: http://auth-service:8010
+      PAYMENT_SERVICE_URL: http://payment-service:8011
+      NOTIFICATION_SERVICE_URL: http://notification-service:8012
+      CORS_ORIGINS: '["${APP_URL:-https://yourapp.com}"]'
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 512M
+
+  # ── Backend microservices ─────────────────────────────────────────────────
+
+  auth-service:
+    <<: *service-defaults
+    build:
+      context: ./services/auth-service
+      dockerfile: Dockerfile
+    expose:
+      - "8010"
+    depends_on:
+      db-migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+      notification-service:
+        condition: service_started
+    env_file:
+      - path: ./services/auth-service/.env
+        required: false
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/${REDIS_DB:-0}
+      SECRET_KEY: ${SECRET_KEY}
+      DEBUG: "false"
+      EMAIL_SERVICE_URL: http://notification-service:8012
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      GOOGLE_REDIRECT_URI: ${GOOGLE_REDIRECT_URI:-}
+      AZURE_CLIENT_ID: ${AZURE_CLIENT_ID:-}
+      AZURE_CLIENT_SECRET: ${AZURE_CLIENT_SECRET:-}
+      AZURE_TENANT_ID: ${AZURE_TENANT_ID:-}
+      <<: *internal-secret-env
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 512M
+
+  payment-service:
+    <<: *service-defaults
+    build:
+      context: ./services/payment-service
+      dockerfile: Dockerfile
+    expose:
+      - "8011"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    env_file:
+      - path: ./services/payment-service/.env
+        required: false
+    environment:
+      <<: [*db-env, *internal-secret-env]
+      DEBUG: "false"
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256M
+
+  # notification-service: handles email (SendGrid) + SMS (Twilio).
+  # Exposes /api/email/* for internal callers (x-internal-secret) and
+  # /api/notifications/* for user-facing calls proxied by api-gateway.
+
+  notification-service:
+    <<: *service-defaults
+    build:
+      context: ./services/notification-service
+      dockerfile: Dockerfile
+    expose:
+      - "8012"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    env_file:
+      - path: ./services/notification-service/.env
+        required: false
+    environment:
+      <<: [*db-env, *internal-secret-env]
+      SENDGRID_API_KEY: ${SENDGRID_API_KEY}
+      FROM_EMAIL: ${FROM_EMAIL:-noreply@yourapp.com}
+      TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID:-}
+      TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN:-}
+      TWILIO_FROM_NUMBER: ${TWILIO_FROM_NUMBER:-}
+      DEBUG: "false"
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256M
+
+  # ── CQRS microservices ────────────────────────────────────────────────────
+  # Each service runs 'alembic upgrade head' at startup via run_in_executor
+
+  chat-service:
+    <<: *service-defaults
+    build:
+      context: ./services/chat-service
+      dockerfile: Dockerfile
+    expose:
+      - "8001"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
+    env_file:
+      - path: ./services/chat-service/.env
+        required: false
+    environment:
+      <<: [*db-env, *kafka-env, *internal-secret-env]
+      DEBUG: "false"
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 512M
+
+  # plot-service: unified command + query handler (runs producer + consumer)
+  # Runs 'alembic upgrade head' at startup for plot_unified schema.
+
+  plot-service:
+    <<: *service-defaults
+    build:
+      context: ./services/plot-service
+      dockerfile: Dockerfile
+    expose:
+      - "8003"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      kafka-init:
+        condition: service_completed_successfully
+    env_file:
+      - path: ./services/plot-service/.env
+        required: false
+    environment:
+      <<: [*db-env, *kafka-env, *internal-secret-env]
+      DEBUG: "false"
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 512M
 
 networks:
-  app_network:
+  prod_net:
     driver: bridge
+
+volumes:
+  prod_postgres_data:
+  prod_redis_data:
+  prod_zookeeper_data:
+  prod_kafka_data:

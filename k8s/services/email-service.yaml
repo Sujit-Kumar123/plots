@@ -1,0 +1,5 @@
+# MERGED — email-service has been merged into notification-service.
+# This file is safe to delete.
+# New manifest: k8s/services/notification-service.yaml
+# Email endpoints (/api/email/send, /api/email/send-bulk) are now served
+# by notification-service on port 8012.

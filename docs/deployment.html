@@ -554,7 +554,7 @@
         <div class="pipe-arrow"></div>
         <div class="pipe-stage">
           <div class="pipe-node node-build">🔨</div>
-          <div class="pipe-label">Build<br>7 images</div>
+          <div class="pipe-label">Build<br>6 images</div>
         </div>
         <div class="pipe-arrow"></div>
         <div class="pipe-stage">
@@ -601,7 +601,7 @@
           <div class="job-icon" style="background:rgba(245,158,11,.1);color:var(--amber)">🚀</div>
           <div class="job-info">
             <div class="job-name">cd.yml <span class="tag tag-amber">main only</span></div>
-            <div class="job-desc">Runs only on pushes to <code>main</code>. Builds 7 Docker images in parallel (monolith app, celery worker, 5 CQRS services), pushes them to GHCR tagged with the short SHA, then deploys to the <code>plots-system</code> K8s namespace and runs smoke tests.</div>
+            <div class="job-desc">Runs only on pushes to <code>main</code>. Builds 6 Docker images in parallel (frontend app, 5 backend microservices), pushes them to GHCR tagged with the short SHA, then deploys to the <code>plots-system</code> K8s namespace and runs smoke tests.</div>
             <div class="job-triggers">
               <span class="tag tag-amber">push → main</span>
             </div>
@@ -769,7 +769,7 @@ docker compose -f docker-compose.cqrs.yml config --quiet</pre>
     <span class="section-anchor" id="cd-build"></span>
     <div class="section">
       <h2><span class="h2-icon" style="background:rgba(139,92,246,.12);color:var(--violet)">🔨</span>CD — Build Images <span class="tag tag-amber">cd.yml</span></h2>
-      <p class="section-lead">Runs 7 build jobs in parallel after CI passes. Each image is tagged with the short commit SHA and <code>latest</code>.</p>
+      <p class="section-lead">Runs 6 build jobs in parallel after CI passes. Each image is tagged with the short commit SHA and <code>latest</code>.</p>
 
       <div class="notice notice-blue">
         <span class="notice-icon">ℹ</span>
@@ -782,13 +782,12 @@ docker compose -f docker-compose.cqrs.yml config --quiet</pre>
             <tr><th>Job</th><th>Dockerfile</th><th>Image name</th></tr>
           </thead>
           <tbody>
-            <tr><td>build-monolith</td><td><code>docker/prod/Dockerfile</code></td><td><code>ghcr.io/&lt;owner&gt;/plots/app</code></td></tr>
-            <tr><td>build-worker</td><td><code>docker/prod/Dockerfile.worker</code></td><td><code>ghcr.io/&lt;owner&gt;/plots/worker</code></td></tr>
-            <tr><td>build-cqrs (api-gateway)</td><td><code>services/api-gateway/Dockerfile</code></td><td><code>ghcr.io/&lt;owner&gt;/plots/api-gateway</code></td></tr>
-            <tr><td>build-cqrs (chat-command)</td><td><code>services/chat-command/Dockerfile</code></td><td><code>ghcr.io/&lt;owner&gt;/plots/chat-command</code></td></tr>
-            <tr><td>build-cqrs (chat-query)</td><td><code>services/chat-query/Dockerfile</code></td><td><code>ghcr.io/&lt;owner&gt;/plots/chat-query</code></td></tr>
-            <tr><td>build-cqrs (plot-command)</td><td><code>services/plot-command/Dockerfile</code></td><td><code>ghcr.io/&lt;owner&gt;/plots/plot-command</code></td></tr>
-            <tr><td>build-cqrs (plot-query)</td><td><code>services/plot-query/Dockerfile</code></td><td><code>ghcr.io/&lt;owner&gt;/plots/plot-query</code></td></tr>
+            <tr><td>build-app</td><td><code>frontend/Dockerfile</code></td><td><code>ghcr.io/&lt;owner&gt;/plots/app</code></td></tr>
+            <tr><td>build-api-gateway</td><td><code>services/api-gateway/Dockerfile</code></td><td><code>ghcr.io/&lt;owner&gt;/plots/api-gateway</code></td></tr>
+            <tr><td>build-auth-service</td><td><code>services/auth-service/Dockerfile</code></td><td><code>ghcr.io/&lt;owner&gt;/plots/auth-service</code></td></tr>
+            <tr><td>build-chat-service</td><td><code>services/chat-service/Dockerfile</code></td><td><code>ghcr.io/&lt;owner&gt;/plots/chat-service</code></td></tr>
+            <tr><td>build-plot-service</td><td><code>services/plot-service/Dockerfile</code></td><td><code>ghcr.io/&lt;owner&gt;/plots/plot-service</code></td></tr>
+            <tr><td>build-notification-service</td><td><code>services/notification-service/Dockerfile</code></td><td><code>ghcr.io/&lt;owner&gt;/plots/notification-service</code></td></tr>
           </tbody>
         </table>
       </div>
@@ -798,7 +797,7 @@ docker compose -f docker-compose.cqrs.yml config --quiet</pre>
     <span class="section-anchor" id="cd-deploy"></span>
     <div class="section">
       <h2><span class="h2-icon" style="background:rgba(245,158,11,.12);color:var(--amber)">☸</span>CD — Deploy to Kubernetes <span class="tag tag-amber">cd.yml</span></h2>
-      <p class="section-lead">Runs after all 7 build jobs complete. Patches each deployment's image tag, runs Alembic migrations, waits for rollouts, then runs smoke tests.</p>
+      <p class="section-lead">Runs after all 6 build jobs complete. Patches each deployment's image tag, runs Alembic migrations, waits for rollouts, then runs smoke tests.</p>
 
       <div class="step-list">
         <div class="step">
@@ -811,7 +810,7 @@ docker compose -f docker-compose.cqrs.yml config --quiet</pre>
         <div class="step">
           <div class="step-num">2</div>
           <div class="step-body">
-            <div class="step-title">Patch image tags on all 7 deployments</div>
+            <div class="step-title">Patch image tags on all 6 deployments</div>
             <div class="step-desc">Runs <code>kubectl set image</code> for each deployment, setting the new short-SHA tag. Kubernetes immediately begins rolling out new pods (rolling update strategy — no downtime).</div>
           </div>
         </div>
@@ -911,11 +910,11 @@ http://localhost:8081  <span class="cm"># Redis Commander (admin / admin)</span>
     <span class="section-anchor" id="manual-cqrs"></span>
     <div class="section">
       <h2><span class="h2-icon" style="background:rgba(139,92,246,.12);color:var(--violet)">⚙</span>Manual — CQRS Microservices Stack</h2>
-      <p class="section-lead">Starts all 5 microservices, Kafka, Zookeeper, kafka-init (topic bootstrap), Kafka UI, and PostgreSQL.</p>
+      <p class="section-lead">Starts all 6 microservices, Kafka, Zookeeper, kafka-init (topic bootstrap), Kafka UI, and PostgreSQL.</p>
 
       <div class="cmd-block">
         <div class="cmd-header"><span class="cmd-file">CQRS stack</span><button class="cmd-copy-btn" onclick="copyBlock(this)">copy</button></div>
-        <pre class="cmd-pre">make cqrs-build       <span class="cm"># builds all 5 service images and starts</span>
+        <pre class="cmd-pre">make cqrs-build       <span class="cm"># builds all 6 service images and starts</span>
 <span class="cm"># Windows:</span>  .\dev.ps1 cqrs-build
 
 <span class="cm"># Services:</span>
@@ -936,7 +935,7 @@ http://localhost:8081  <span class="cm"># Redis Commander (admin / admin)</span>
           <div class="job-icon" style="background:rgba(59,130,246,.1);color:var(--blue)">1</div>
           <div class="job-info">
             <div class="job-name">PostgreSQL + Zookeeper</div>
-            <div class="job-desc">Start in parallel. PostgreSQL runs <code>scripts/init-schemas.sql</code> on first start to create the four CQRS schemas.</div>
+            <div class="job-desc">Start in parallel. PostgreSQL runs <code>scripts/init-schemas.sql</code> on first start to create the CQRS schemas (<code>chat_write</code>, <code>chat_read</code>, <code>plot_unified</code>).</div>
           </div>
         </div>
         <div class="job-row">
@@ -956,8 +955,8 @@ http://localhost:8081  <span class="cm"># Redis Commander (admin / admin)</span>
         <div class="job-row">
           <div class="job-icon" style="background:rgba(59,130,246,.1);color:var(--blue)">4</div>
           <div class="job-info">
-            <div class="job-name">5 microservices</div>
-            <div class="job-desc">Each runs <code>Base.metadata.create_all</code> on startup — no separate migration step. <code>chat-query</code> and <code>plot-query</code> start Kafka consumer background tasks.</div>
+            <div class="job-name">6 microservices</div>
+            <div class="job-desc">Each CQRS service runs <code>alembic upgrade head</code> at startup. <code>chat-service</code> and <code>plot-service</code> also start Kafka consumer background tasks for their internal projectors.</div>
           </div>
         </div>
       </div>
@@ -1048,16 +1047,12 @@ kubectl apply -f k8s/ingress.yaml</pre>
         <pre class="cmd-pre">REGISTRY=ghcr.io/&lt;your-username&gt;/plots
 SHA=$(git rev-parse --short HEAD)
 
-<span class="cm"># Monolith</span>
-docker build -t $REGISTRY/app:$SHA -f docker/prod/Dockerfile .
+<span class="cm"># Frontend app</span>
+docker build -t $REGISTRY/app:$SHA -f frontend/Dockerfile .
 docker push $REGISTRY/app:$SHA
 
-<span class="cm"># Worker</span>
-docker build -t $REGISTRY/worker:$SHA -f docker/prod/Dockerfile.worker .
-docker push $REGISTRY/worker:$SHA
-
-<span class="cm"># CQRS microservices</span>
-for svc in api-gateway chat-command chat-query plot-command plot-query; do
+<span class="cm"># Backend microservices</span>
+for svc in api-gateway auth-service chat-service plot-service notification-service; do
   docker build -t $REGISTRY/$svc:$SHA services/$svc/
   docker push $REGISTRY/$svc:$SHA
 done</pre>
@@ -1075,8 +1070,8 @@ done</pre>
         <pre class="cmd-pre"><span class="cm"># Roll back a single deployment</span>
 kubectl rollout undo deployment/api-gateway -n plots-system
 
-<span class="cm"># Roll back all CQRS services at once</span>
-for d in app worker api-gateway chat-command chat-query plot-command plot-query; do
+<span class="cm"># Roll back all services at once</span>
+for d in app api-gateway auth-service chat-service plot-service notification-service; do
   kubectl rollout undo deployment/$d -n plots-system
 done
 
@@ -1108,12 +1103,11 @@ kubectl rollout history deployment/app -n plots-system</pre>
           </thead>
           <tbody>
             <tr><td><code>ghcr.io/&lt;owner&gt;/plots/app</code></td><td><code>&lt;short-sha&gt;</code> · <code>latest</code></td><td>Every push to main</td></tr>
-            <tr><td><code>ghcr.io/&lt;owner&gt;/plots/worker</code></td><td><code>&lt;short-sha&gt;</code> · <code>latest</code></td><td>Every push to main</td></tr>
             <tr><td><code>ghcr.io/&lt;owner&gt;/plots/api-gateway</code></td><td><code>&lt;short-sha&gt;</code> · <code>latest</code></td><td>Every push to main</td></tr>
-            <tr><td><code>ghcr.io/&lt;owner&gt;/plots/chat-command</code></td><td><code>&lt;short-sha&gt;</code> · <code>latest</code></td><td>Every push to main</td></tr>
-            <tr><td><code>ghcr.io/&lt;owner&gt;/plots/chat-query</code></td><td><code>&lt;short-sha&gt;</code> · <code>latest</code></td><td>Every push to main</td></tr>
-            <tr><td><code>ghcr.io/&lt;owner&gt;/plots/plot-command</code></td><td><code>&lt;short-sha&gt;</code> · <code>latest</code></td><td>Every push to main</td></tr>
-            <tr><td><code>ghcr.io/&lt;owner&gt;/plots/plot-query</code></td><td><code>&lt;short-sha&gt;</code> · <code>latest</code></td><td>Every push to main</td></tr>
+            <tr><td><code>ghcr.io/&lt;owner&gt;/plots/auth-service</code></td><td><code>&lt;short-sha&gt;</code> · <code>latest</code></td><td>Every push to main</td></tr>
+            <tr><td><code>ghcr.io/&lt;owner&gt;/plots/chat-service</code></td><td><code>&lt;short-sha&gt;</code> · <code>latest</code></td><td>Every push to main</td></tr>
+            <tr><td><code>ghcr.io/&lt;owner&gt;/plots/plot-service</code></td><td><code>&lt;short-sha&gt;</code> · <code>latest</code></td><td>Every push to main</td></tr>
+            <tr><td><code>ghcr.io/&lt;owner&gt;/plots/notification-service</code></td><td><code>&lt;short-sha&gt;</code> · <code>latest</code></td><td>Every push to main</td></tr>
           </tbody>
         </table>
       </div>

@@ -1,150 +1,349 @@
 <#
 .SYNOPSIS
-  Windows equivalent of the Makefile — run dev/prod/CQRS Docker tasks.
+  Windows dev helper — run Docker Compose tasks for the full microservices stack.
+
+.DESCRIPTION
+  Six backend microservices (api-gateway, auth-service, chat-service, plot-service,
+  payment-service, notification-service) + Next.js frontend served via Nginx.
+  Migrations are handled automatically: auth-service runs Alembic on startup;
+  chat-service and plot-service each run their own migrations at startup.
 
 .EXAMPLE
-  .\dev.ps1 dev-build
-  .\dev.ps1 migrate
-  .\dev.ps1 cqrs-build
-  .\dev.ps1 help
+  .\dev.ps1 dev-build       # First run / after Dockerfile changes
+  .\dev.ps1 dev             # Subsequent runs (images already built)
+  .\dev.ps1 dev-down        # Stop and remove containers
+  .\dev.ps1 dev-clean       # Stop and remove containers + all volumes (wipes DB)
+  .\dev.ps1 logs            # Follow all logs
+  .\dev.ps1 logs-chat       # Follow chat-service logs
+  .\dev.ps1 status          # Show container health
+  .\dev.ps1 help            # Show this help
 #>
 
 param(
-    [string]$Task = "help",
-    [string]$Msg  = "migration"
+    [string]$Task    = "help",
+    [string]$Msg     = "migration",
+    [string]$Service = ""
 )
+
+Set-StrictMode -Off
+$ErrorActionPreference = "Stop"
 
 $DEV  = "docker compose -f docker-compose.dev.yml"
 $PROD = "docker compose"
 $CQRS = "docker compose -f docker-compose.cqrs.yml"
 
+function Run([string]$cmd) {
+    Write-Host "> $cmd" -ForegroundColor Cyan
+    Invoke-Expression $cmd
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "Command failed (exit $LASTEXITCODE)" -ForegroundColor Red
+        exit $LASTEXITCODE
+    }
+}
+
 switch ($Task) {
 
-    # ── Development (Monolith) ──────────────────────────────────────────────────
+    # ── Full Dev Stack (docker-compose.dev.yml) ──────────────────────────────
+    # All 6 microservices + frontend/nginx + postgres + redis + kafka + dev tools
+    # Source volumes mounted for hot-reload. All ports exposed.
 
     "dev" {
-        Invoke-Expression "$DEV up -d"
+        Run "$DEV up -d"
+        Write-Host ""
+        Write-Host "  Stack started. Access points:" -ForegroundColor Green
+        Write-Host "  App         http://localhost"
+        Write-Host "  API Gateway http://localhost:8000"
+        Write-Host "  Swagger     http://localhost:8000/docs"
+        Write-Host ""
+        Write-Host "  Use '.\dev.ps1 status' to watch service health."
     }
     "dev-build" {
-        Invoke-Expression "$DEV up --build -d"
+        Run "$DEV up --build -d"
+        Write-Host ""
+        Write-Host "  Stack rebuilt and started. Access points:" -ForegroundColor Green
+        Write-Host "  App         http://localhost"
+        Write-Host "  API Gateway http://localhost:8000"
+        Write-Host "  Swagger     http://localhost:8000/docs"
+        Write-Host ""
+        Write-Host "  Use '.\dev.ps1 status' to watch service health."
     }
     "dev-down" {
-        Invoke-Expression "$DEV down"
+        Run "$DEV down"
+    }
+    "dev-clean" {
+        Write-Host "WARNING: This will delete all Docker volumes (database data, etc.)" -ForegroundColor Yellow
+        $confirm = Read-Host "Type 'yes' to continue"
+        if ($confirm -eq "yes") {
+            Run "$DEV down -v"
+        } else {
+            Write-Host "Aborted." -ForegroundColor Yellow
+        }
     }
 
-    # ── Production (Monolith) ───────────────────────────────────────────────────
+    # ── Production (docker-compose.yml) ──────────────────────────────────────
 
     "prod" {
-        Invoke-Expression "$PROD up -d"
+        Run "$PROD up -d"
     }
     "prod-build" {
-        Invoke-Expression "$PROD up --build -d"
+        Run "$PROD up --build -d"
     }
     "prod-down" {
-        Invoke-Expression "$PROD down"
+        Run "$PROD down"
     }
 
-    # ── CQRS Microservices ──────────────────────────────────────────────────────
+    # ── CQRS-only Stack (docker-compose.cqrs.yml) ─────────────────────────────
+    # Lightweight: api-gateway + chat-service + plot-service + kafka + postgres
+    # No auth/payment/notification. Good for isolated CQRS domain development.
 
     "cqrs" {
-        Invoke-Expression "$CQRS up -d"
+        Run "$CQRS up -d"
     }
     "cqrs-build" {
-        Invoke-Expression "$CQRS up --build -d"
+        Run "$CQRS up --build -d"
     }
     "cqrs-down" {
-        Invoke-Expression "$CQRS down"
+        Run "$CQRS down"
+    }
+    "cqrs-clean" {
+        Write-Host "WARNING: This will delete all CQRS Docker volumes." -ForegroundColor Yellow
+        $confirm = Read-Host "Type 'yes' to continue"
+        if ($confirm -eq "yes") {
+            Run "$CQRS down -v"
+        } else {
+            Write-Host "Aborted." -ForegroundColor Yellow
+        }
     }
 
-    # ── Logs ─────────────────────────────────────────────────────────────────────
+    # ── Container Status ──────────────────────────────────────────────────────
+
+    "status" {
+        Run "$DEV ps"
+    }
+    "cqrs-status" {
+        Run "$CQRS ps"
+    }
+
+    # ── Logs (dev stack) ──────────────────────────────────────────────────────
 
     "logs" {
-        Invoke-Expression "$DEV logs -f app"
+        Run "$DEV logs -f --tail=100"
     }
-    "logs-worker" {
-        Invoke-Expression "$DEV logs -f worker"
+    "logs-app" {
+        Run "$DEV logs -f --tail=100 app"
     }
     "logs-gateway" {
-        Invoke-Expression "$CQRS logs -f api-gateway"
+        Run "$DEV logs -f --tail=100 api-gateway"
     }
-    "logs-chat-cmd" {
-        Invoke-Expression "$CQRS logs -f chat-command"
+    "logs-auth" {
+        Run "$DEV logs -f --tail=100 auth-service"
     }
-    "logs-chat-qry" {
-        Invoke-Expression "$CQRS logs -f chat-query"
+    "logs-chat" {
+        Run "$DEV logs -f --tail=100 chat-service"
     }
-    "logs-plot-cmd" {
-        Invoke-Expression "$CQRS logs -f plot-command"
+    "logs-plot" {
+        Run "$DEV logs -f --tail=100 plot-service"
     }
-    "logs-plot-qry" {
-        Invoke-Expression "$CQRS logs -f plot-query"
+    "logs-payment" {
+        Run "$DEV logs -f --tail=100 payment-service"
+    }
+    "logs-notification" {
+        Run "$DEV logs -f --tail=100 notification-service"
+    }
+    "logs-kafka" {
+        Run "$DEV logs -f --tail=100 kafka"
+    }
+    "logs-db" {
+        Run "$DEV logs -f --tail=100 postgres"
+    }
+    "logs-migrate" {
+        Run "$DEV logs db-migrate"
     }
 
-    # ── Database ──────────────────────────────────────────────────────────────────
+    # ── Logs (CQRS stack) ─────────────────────────────────────────────────────
+
+    "cqrs-logs" {
+        Run "$CQRS logs -f --tail=100"
+    }
+    "cqrs-logs-gateway" {
+        Run "$CQRS logs -f --tail=100 api-gateway"
+    }
+    "cqrs-logs-chat" {
+        Run "$CQRS logs -f --tail=100 chat-service"
+    }
+    "cqrs-logs-plot" {
+        Run "$CQRS logs -f --tail=100 plot-service"
+    }
+
+    # ── Database Migrations ───────────────────────────────────────────────────
+    # Migrations run automatically on startup via the db-migrate init container.
+    # Use these commands only if you need to run them manually.
 
     "migrate" {
-        Invoke-Expression "$DEV exec app sh -c 'cd /app/backend && .venv/bin/alembic upgrade head'"
+        Run "$DEV exec auth-service uv run alembic upgrade head"
     }
     "migrate-new" {
-        Invoke-Expression "$DEV exec app sh -c 'cd /app/backend && .venv/bin/alembic revision --autogenerate -m ""$Msg""'"
-    }
-    "seed" {
-        Invoke-Expression "$DEV exec app sh -c 'cd /app/backend && .venv/bin/python scripts/seed.py'"
+        Run "$DEV exec auth-service uv run alembic revision --autogenerate -m '$Msg'"
     }
 
-    # ── Shell ─────────────────────────────────────────────────────────────────────
+    # ── Shell Access ──────────────────────────────────────────────────────────
 
     "shell" {
-        Invoke-Expression "$DEV exec app bash"
+        if ($Service -ne "") {
+            Run "$DEV exec $Service bash"
+        } else {
+            Run "$DEV exec api-gateway bash"
+        }
     }
     "shell-gateway" {
-        Invoke-Expression "$CQRS exec api-gateway bash"
+        Run "$DEV exec api-gateway bash"
+    }
+    "shell-auth" {
+        Run "$DEV exec auth-service bash"
+    }
+    "shell-chat" {
+        Run "$DEV exec chat-service bash"
+    }
+    "shell-plot" {
+        Run "$DEV exec plot-service bash"
+    }
+    "shell-payment" {
+        Run "$DEV exec payment-service bash"
+    }
+    "shell-notification" {
+        Run "$DEV exec notification-service bash"
+    }
+    "shell-db" {
+        Run "$DEV exec postgres psql -U `${POSTGRES_USER:-mvp_user} -d `${POSTGRES_DB:-mvp_db}"
     }
 
-    # ── Help ──────────────────────────────────────────────────────────────────────
+    # ── Restart Individual Services ───────────────────────────────────────────
+
+    "restart-gateway" {
+        Run "$DEV restart api-gateway"
+    }
+    "restart-auth" {
+        Run "$DEV restart auth-service"
+    }
+    "restart-chat" {
+        Run "$DEV restart chat-service"
+    }
+    "restart-plot" {
+        Run "$DEV restart plot-service"
+    }
+
+    # ── Health Check ──────────────────────────────────────────────────────────
+    # Polls /health/ready on all 6 microservices and prints a summary.
+
+    "health" {
+        $services = @(
+            @{ name = "api-gateway";        port = 8000 },
+            @{ name = "auth-service";       port = 8010 },
+            @{ name = "chat-service";       port = 8001 },
+            @{ name = "plot-service";       port = 8003 },
+            @{ name = "payment-service";    port = 8011 },
+            @{ name = "notification-svc";   port = 8012 }
+        )
+        Write-Host ""
+        Write-Host "  Service Health Check" -ForegroundColor Cyan
+        Write-Host "  ──────────────────────────────────────────────"
+        foreach ($svc in $services) {
+            try {
+                $resp = Invoke-WebRequest -Uri "http://localhost:$($svc.port)/health/ready" `
+                    -UseBasicParsing -TimeoutSec 3 -ErrorAction Stop
+                $color = if ($resp.StatusCode -eq 200) { "Green" } else { "Yellow" }
+                $label = if ($resp.StatusCode -eq 200) { "ready  " } else { "degraded" }
+                Write-Host "  $label  $($svc.name):$($svc.port)" -ForegroundColor $color
+            } catch {
+                Write-Host "  error    $($svc.name):$($svc.port)" -ForegroundColor Red
+            }
+        }
+        Write-Host ""
+    }
+
+    # ── Help ──────────────────────────────────────────────────────────────────
 
     default {
         Write-Host ""
-        Write-Host "  Usage: .\dev.ps1 <task> [-Msg '<description>']"
+        Write-Host "  Usage: .\dev.ps1 <task> [-Msg '<text>'] [-Service '<name>']" -ForegroundColor Cyan
         Write-Host ""
-        Write-Host "  Monolith — Development  (docker-compose.dev.yml)"
-        Write-Host "  ──────────────────────────────────────────────────────────"
-        Write-Host "  dev              Start monolith dev stack (hot-reload)"
-        Write-Host "  dev-build        Rebuild image and start dev stack"
-        Write-Host "  dev-down         Stop dev stack"
+        Write-Host "  Full Dev Stack  (docker-compose.dev.yml)" -ForegroundColor Yellow
+        Write-Host "  ──────────────────────────────────────────────────────────────"
+        Write-Host "  dev-build        Rebuild all images and start (first run)"
+        Write-Host "  dev              Start stack with existing images"
+        Write-Host "  dev-down         Stop containers (keep volumes)"
+        Write-Host "  dev-clean        Stop containers + delete all volumes (wipes DB)"
+        Write-Host "  status           Show container health status"
+        Write-Host "  health           Poll /health/ready on all 6 microservices"
         Write-Host ""
-        Write-Host "  Monolith — Production  (docker-compose.yml)"
-        Write-Host "  ──────────────────────────────────────────────────────────"
-        Write-Host "  prod             Start monolith production stack"
-        Write-Host "  prod-build       Rebuild image and start production stack"
+        Write-Host "  CQRS-only Stack  (docker-compose.cqrs.yml)" -ForegroundColor Yellow
+        Write-Host "  ──────────────────────────────────────────────────────────────"
+        Write-Host "  cqrs-build       Rebuild and start CQRS-only stack"
+        Write-Host "  cqrs             Start CQRS stack"
+        Write-Host "  cqrs-down        Stop CQRS stack"
+        Write-Host "  cqrs-clean       Stop + delete CQRS volumes"
+        Write-Host "  cqrs-status      Show CQRS container health"
+        Write-Host ""
+        Write-Host "  Production  (docker-compose.yml)" -ForegroundColor Yellow
+        Write-Host "  ──────────────────────────────────────────────────────────────"
+        Write-Host "  prod-build       Rebuild and start production stack"
+        Write-Host "  prod             Start production stack"
         Write-Host "  prod-down        Stop production stack"
         Write-Host ""
-        Write-Host "  CQRS Microservices  (docker-compose.cqrs.yml)"
-        Write-Host "  ──────────────────────────────────────────────────────────"
-        Write-Host "  cqrs             Start CQRS stack"
-        Write-Host "  cqrs-build       Rebuild all 5 service images and start"
-        Write-Host "  cqrs-down        Stop CQRS stack"
+        Write-Host "  Logs  (dev stack)" -ForegroundColor Yellow
+        Write-Host "  ──────────────────────────────────────────────────────────────"
+        Write-Host "  logs             Follow all service logs"
+        Write-Host "  logs-app         Follow frontend / nginx logs"
+        Write-Host "  logs-gateway     Follow api-gateway logs"
+        Write-Host "  logs-auth        Follow auth-service logs"
+        Write-Host "  logs-chat        Follow chat-service logs (producer + consumer)"
+        Write-Host "  logs-plot        Follow plot-service logs (producer + consumer)"
+        Write-Host "  logs-payment     Follow payment-service logs"
+        Write-Host "  logs-notification Follow notification-service logs"
+        Write-Host "  logs-kafka       Follow Kafka broker logs"
+        Write-Host "  logs-db          Follow PostgreSQL logs"
+        Write-Host "  logs-migrate     Show db-migrate init container output"
         Write-Host ""
-        Write-Host "  Logs"
-        Write-Host "  ──────────────────────────────────────────────────────────"
-        Write-Host "  logs             Follow app logs            (monolith dev)"
-        Write-Host "  logs-worker      Follow Celery worker logs  (monolith dev)"
-        Write-Host "  logs-gateway     Follow api-gateway logs    (CQRS)"
-        Write-Host "  logs-chat-cmd    Follow chat-command logs   (CQRS)"
-        Write-Host "  logs-chat-qry    Follow chat-query logs     (CQRS)"
-        Write-Host "  logs-plot-cmd    Follow plot-command logs   (CQRS)"
-        Write-Host "  logs-plot-qry    Follow plot-query logs     (CQRS)"
+        Write-Host "  Logs  (CQRS stack)" -ForegroundColor Yellow
+        Write-Host "  ──────────────────────────────────────────────────────────────"
+        Write-Host "  cqrs-logs        Follow all CQRS logs"
+        Write-Host "  cqrs-logs-gateway"
+        Write-Host "  cqrs-logs-chat"
+        Write-Host "  cqrs-logs-plot"
         Write-Host ""
-        Write-Host "  Database  (monolith dev)"
-        Write-Host "  ──────────────────────────────────────────────────────────"
-        Write-Host "  migrate          Apply all pending Alembic migrations"
-        Write-Host "  migrate-new      Generate a new migration (-Msg 'description')"
-        Write-Host "  seed             Run the database seeder"
+        Write-Host "  Database" -ForegroundColor Yellow
+        Write-Host "  ──────────────────────────────────────────────────────────────"
+        Write-Host "  migrate                     Apply pending Alembic migrations"
+        Write-Host "  migrate-new -Msg 'desc'     Generate a new migration file"
         Write-Host ""
-        Write-Host "  Shell"
-        Write-Host "  ──────────────────────────────────────────────────────────"
-        Write-Host "  shell            Open bash in app container  (monolith dev)"
-        Write-Host "  shell-gateway    Open bash in api-gateway    (CQRS)"
+        Write-Host "  Shell" -ForegroundColor Yellow
+        Write-Host "  ──────────────────────────────────────────────────────────────"
+        Write-Host "  shell-gateway    bash in api-gateway"
+        Write-Host "  shell-auth       bash in auth-service"
+        Write-Host "  shell-chat       bash in chat-service"
+        Write-Host "  shell-plot       bash in plot-service"
+        Write-Host "  shell-payment    bash in payment-service"
+        Write-Host "  shell-notification bash in notification-service"
+        Write-Host "  shell -Service <name>  bash in any named container"
+        Write-Host ""
+        Write-Host "  Restart" -ForegroundColor Yellow
+        Write-Host "  ──────────────────────────────────────────────────────────────"
+        Write-Host "  restart-gateway / restart-auth / restart-chat / restart-plot"
+        Write-Host ""
+        Write-Host "  Swagger (dev stack, DEBUG=true)" -ForegroundColor Yellow
+        Write-Host "  ──────────────────────────────────────────────────────────────"
+        Write-Host "  http://localhost:8000/docs    api-gateway  (all routes)"
+        Write-Host "  http://localhost:8010/docs    auth-service"
+        Write-Host "  http://localhost:8001/docs    chat-service"
+        Write-Host "  http://localhost:8003/docs    plot-service"
+        Write-Host "  http://localhost:8011/docs    payment-service"
+        Write-Host "  http://localhost:8012/docs    notification-service"
+        Write-Host ""
+        Write-Host "  Dev Tools" -ForegroundColor Yellow
+        Write-Host "  ──────────────────────────────────────────────────────────────"
+        Write-Host "  http://localhost:5050    pgAdmin  (admin@local.dev / admin)"
+        Write-Host "  http://localhost:8090    Kafka UI"
+        Write-Host "  http://localhost:8081    Redis Commander  (admin / admin)"
         Write-Host ""
     }
 }

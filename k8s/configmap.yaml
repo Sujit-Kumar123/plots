@@ -7,11 +7,20 @@ data:
   APP_ENV: "production"
   DEBUG: "false"
   KAFKA_BOOTSTRAP_SERVERS: "kafka:9092"
-  CHAT_COMMAND_URL: "http://chat-command:8001"
-  CHAT_QUERY_URL: "http://chat-query:8002"
-  PLOT_COMMAND_URL: "http://plot-command:8003"
-  PLOT_QUERY_URL: "http://plot-query:8004"
+  # API Gateway downstream service URLs
+  CHAT_COMMAND_URL: "http://chat-service:8001"
+  CHAT_QUERY_URL: "http://chat-service:8001"
+  PLOT_COMMAND_URL: "http://plot-service:8003"
+  PLOT_QUERY_URL: "http://plot-service:8003"
+  AUTH_SERVICE_URL: "http://auth-service:8010"
+  PAYMENT_SERVICE_URL: "http://payment-service:8011"
+  NOTIFICATION_SERVICE_URL: "http://notification-service:8012"
+  EMAIL_SERVICE_URL: "http://notification-service:8012"
+  # Database
   POSTGRES_HOST: "postgres"
   POSTGRES_PORT: "5432"
   POSTGRES_DB: "mvp_db"
+  # Redis (password-less URL; services that need auth override REDIS_URL with their own env)
   REDIS_URL: "redis://redis:6379/0"
+  # Email
+  FROM_EMAIL: "noreply@yourapp.com"

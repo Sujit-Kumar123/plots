@@ -950,7 +950,7 @@
             <span class="req-name">SendGrid</span>
             <span class="req-badge badge-amber">optional</span>
           </div>
-          <p class="req-desc">Transactional email (password reset, account verification, notifications). Delivered via Celery worker task.</p>
+          <p class="req-desc">Transactional email (password reset, account verification, notifications). Delivered directly by <strong>notification-service</strong> — no Celery required.</p>
           <div class="req-commands">
             <div class="cmd-row">
               <span class="cmd-label lbl-install">dashboard</span>
