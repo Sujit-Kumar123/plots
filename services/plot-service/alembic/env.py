@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import create_async_engine
 from alembic import context
 from app.config import settings
 from app.database import Base
-from app.models import Plot  # noqa: F401 — registers table with Base.metadata
+from app.plots.models.plot_models import Plot  # noqa: F401 — registers table with Base.metadata
 
 config = context.config
 

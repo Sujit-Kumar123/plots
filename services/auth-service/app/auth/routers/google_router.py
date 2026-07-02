@@ -8,7 +8,7 @@ from app.auth.dependencies import get_current_user
 from app.auth.models import User
 from app.auth.service import GoogleAuthService
 from app.auth.utils.cookies import set_auth_cookies
-from app.common.responses import success_response
+from app.common.responses import ResponseHandler
 from app.database import get_db
 
 logger = logging.getLogger(__name__)
@@ -61,7 +61,7 @@ async def google_status(current_user: User = Depends(get_current_user)):
 
     async with async_session_factory() as db:
         svc = GoogleAuthService(db)
-        return success_response(data=svc.get_oauth_status(current_user))
+        return ResponseHandler.ok(data=svc.get_oauth_status(current_user))
 
 
 @router.delete("/unlink")
@@ -72,4 +72,4 @@ async def google_unlink(
     """Unlink Google account from the current user."""
     svc = GoogleAuthService(db)
     await svc.unlink_google_account(current_user)
-    return success_response(message="Google account unlinked")
+    return ResponseHandler.ok("Google account unlinked")

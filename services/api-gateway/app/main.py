@@ -2,25 +2,30 @@ from contextlib import asynccontextmanager
 
 import httpx
 from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
 from fastapi.responses import JSONResponse
 
 from app.audit.middleware import AuditMiddleware
-from app.audit.router import router as audit_admin_router
+from app.audit.routers.audit_router import router as audit_admin_router
 from app.common.exceptions import register_exception_handlers
+from app.common.responses import ResponseHandler
 from app.common.logging import setup_logging
 from app.common.middleware import RateLimitMiddleware, RequestIDMiddleware, RequestLoggingMiddleware
 from app.config import settings
 from app.database import engine
 from app.middleware import SessionValidationMiddleware
 from app.routers import chat, plot
+from app.routers.auth_cookies import router as auth_cookies_router
 from app.routers.backend import (
     admin_router,
     auth_router,
     notification_router,
     payment_router,
+    permissions_proxy_router,
     profile_router,
+    roles_proxy_router,
     uploads_router,
 )
 
@@ -118,6 +123,31 @@ app.add_middleware(
 )
 register_exception_handlers(app)
 
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    error_details = exc.errors()
+    field_errors = []
+    for error in error_details:
+        loc = error.get("loc", [])
+        msg = error.get("msg", "Invalid value")
+        if len(loc) > 1 and loc[0] in ("body", "query", "path"):
+            field_name = str(loc[1])
+        else:
+            field_name = str(loc[-1]) if loc else "unknown"
+        field_label = field_name.replace("_", " ").capitalize()
+        replacements = ["string", "number", "integer", "boolean", "field", "value"]
+        custom_msg = msg.lower()
+        for word in replacements:
+            if word.lower() in msg.lower():
+                custom_msg = custom_msg.replace(word.lower(), field_label)
+                break
+        field_errors.append({"field": field_name, "message": custom_msg})
+    return ResponseHandler.unprocessable_entity(
+        message="Please fill all the required fields.", errors=field_errors
+    )
+
+
 app.add_middleware(AuditMiddleware)
 app.add_middleware(SessionValidationMiddleware)
 app.add_middleware(RateLimitMiddleware)
@@ -129,6 +159,14 @@ app.include_router(chat.router, prefix="/api/v1/chat", tags=["chat"])
 app.include_router(plot.router, prefix="/api/v1/plots", tags=["plots"])
 
 # ── Backend service proxy routes ──────────────────────────────────────────────
+# roles and permissions routers must be registered BEFORE auth_router so that
+# /api/auth/roles/* and /api/auth/permissions/* are matched first (FastAPI uses
+# registration order for route resolution).
+app.include_router(roles_proxy_router, prefix="/api/auth/roles")
+app.include_router(permissions_proxy_router, prefix="/api/auth/permissions")
+# auth_cookies_router handles login/register/refresh/logout and sets HttpOnly cookies
+# directly in the gateway — must be registered BEFORE the generic auth_router catch-all.
+app.include_router(auth_cookies_router, prefix="/api/auth")
 app.include_router(auth_router, prefix="/api/auth")
 app.include_router(profile_router, prefix="/api/profile")
 app.include_router(audit_admin_router, prefix="/api/admin")

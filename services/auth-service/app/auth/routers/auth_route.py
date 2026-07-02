@@ -17,7 +17,7 @@ from app.auth.schemas import (
 )
 from app.auth.service import AuthService
 from app.auth.utils.cookies import clear_auth_cookies, set_auth_cookies
-from app.common.responses import success_response
+from app.common.responses import ResponseHandler
 from app.config import settings
 from app.database import get_db
 from app.notifications.email import send_email
@@ -50,7 +50,7 @@ async def register(body: RegisterRequest, request: Request, response: Response, 
     user, access_token, refresh_token = await svc.register_user(body.email, body.password, body.fname, body.lname, ip)
     user = await svc.get_user_with_relations(user.id)
     set_auth_cookies(response, access_token, refresh_token)
-    return success_response(
+    return ResponseHandler.ok(
         data=RegisterResponse(
             user=UserWithProfileResponse.model_validate(user),
             tokens=AuthTokens(access_token=access_token, refresh_token=refresh_token),
@@ -66,7 +66,7 @@ async def login(body: LoginRequest, request: Request, response: Response, db: As
     user, access_token, refresh_token = await svc.login_user(body.email, body.password, ip, device_type)
     user = await svc.get_user_with_relations(user.id)
     set_auth_cookies(response, access_token, refresh_token)
-    return success_response(
+    return ResponseHandler.ok(
         data=LoginResponse(
             user=UserWithProfileResponse.model_validate(user),
             tokens=AuthTokens(access_token=access_token, refresh_token=refresh_token),
@@ -79,7 +79,7 @@ async def refresh(body: RefreshRequest, response: Response, db: AsyncSession = D
     svc = AuthService(db)
     access_token, refresh_token = await svc.refresh_access_token(body.refresh_token)
     set_auth_cookies(response, access_token, refresh_token)
-    return success_response(data=AuthTokens(access_token=access_token, refresh_token=refresh_token).model_dump())
+    return ResponseHandler.ok(data=AuthTokens(access_token=access_token, refresh_token=refresh_token).model_dump())
 
 
 @router.post("/logout")
@@ -91,7 +91,7 @@ async def logout(
     svc = AuthService(db)
     await svc.logout_user(current_user.id)
     clear_auth_cookies(response)
-    return success_response(message="Logged out")
+    return ResponseHandler.ok("Logged out")
 
 
 @router.post("/forgot-password", dependencies=[Depends(_email_auth_enabled)])
@@ -110,17 +110,14 @@ async def forgot_password(body: ForgotPasswordRequest, db: AsyncSession = Depend
         )
         if settings.debug:
             dev_data = {"reset_url": reset_url}
-    return success_response(
-        data=dev_data,
-        message="If the email exists, a reset link has been sent",
-    )
+    return ResponseHandler.ok("If the email exists, a reset link has been sent", data=dev_data)
 
 
 @router.post("/reset-password", dependencies=[Depends(_email_auth_enabled)])
 async def reset_password(body: ResetPasswordRequest, db: AsyncSession = Depends(get_db)):
     svc = AuthService(db)
     await svc.confirm_password_reset(body.token, body.new_password)
-    return success_response(message="Password has been reset")
+    return ResponseHandler.ok("Password has been reset")
 
 
 @router.post("/change-password", dependencies=[Depends(_email_auth_enabled)])
@@ -131,4 +128,4 @@ async def change_password(
 ):
     svc = AuthService(db)
     await svc.change_password(current_user.id, body.current_password, body.new_password)
-    return success_response(message="Password changed")
+    return ResponseHandler.ok("Password changed")

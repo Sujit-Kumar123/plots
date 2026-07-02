@@ -6,8 +6,8 @@ from sqlalchemy.ext.asyncio import create_async_engine
 from alembic import context
 from app.config import settings
 from app.database import Base
-from app.read_models import ChatMessageReadModel, ChatSessionReadModel  # noqa: F401
-from app.write_models import ChatMessage, ChatSession  # noqa: F401
+from app.chat.models.read_models import ChatMessageReadModel, ChatSessionReadModel  # noqa: F401
+from app.chat.models.write_models import ChatMessage, ChatSession  # noqa: F401
 
 config = context.config
 

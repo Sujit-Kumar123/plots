@@ -1,3 +1,4 @@
+import json
 from hashlib import sha256
 
 import httpx
@@ -5,11 +6,15 @@ from jose import JWTError, jwt
 from redis.asyncio import Redis
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.requests import Request
-from starlette.responses import JSONResponse, Response
+from starlette.responses import Response
 
+from app.common.responses import ResponseHandler
 from app.config import settings
 
-# Paths that never require a token (login, register, OAuth redirects, etc.)
+# ---------------------------------------------------------------------------
+# Public / protected path sets
+# ---------------------------------------------------------------------------
+
 _PUBLIC_PATHS = frozenset(
     {
         "/api/auth/login",
@@ -29,16 +34,73 @@ _PUBLIC_PREFIXES = ("/api/auth/google", "/api/auth/azure", "/api/auth/internal/"
 # CQRS routes must have a valid token — 401 if missing
 _REQUIRE_AUTH_PREFIXES = ("/api/v1/",)
 
+# How long (seconds) role-permission sets are cached in Redis.
+_PERM_CACHE_TTL = 300  # 5 minutes
+
+
+async def _fetch_role_permissions(http_client: httpx.AsyncClient, role_name: str) -> frozenset[str]:
+    """
+    Return the permission codes for *role_name*.
+
+    Fast path: Redis cache keyed by ``perms:{role_name}`` with a 5-minute TTL.
+    Slow path: POST to auth-service ``/api/auth/internal/role-permissions``.
+    If both are unavailable the empty set is returned so the request is rejected
+    rather than granted phantom access.
+
+    ``superadmin`` is always resolved locally — it never needs a DB round-trip.
+    """
+    if role_name == "superadmin":
+        return frozenset({"*"})
+
+    cache_key = f"perms:{role_name}"
+
+    # ── Redis cache ───────────────────────────────────────────────────────────
+    try:
+        redis = Redis.from_url(settings.redis_url, decode_responses=True)
+        cached = await redis.get(cache_key)
+        await redis.aclose()
+        if cached:
+            return frozenset(json.loads(cached))
+    except Exception:
+        pass
+
+    # ── auth-service lookup ───────────────────────────────────────────────────
+    try:
+        resp = await http_client.post(
+            f"{settings.auth_service_url}/api/auth/internal/role-permissions",
+            json={"role_name": role_name},
+            headers={"x-internal-secret": settings.internal_service_secret},
+            timeout=3.0,
+        )
+        if resp.status_code == 200:
+            codes: list[str] = resp.json().get("permissions", [])
+            try:
+                redis = Redis.from_url(settings.redis_url, decode_responses=True)
+                await redis.setex(cache_key, _PERM_CACHE_TTL, json.dumps(codes))
+                await redis.aclose()
+            except Exception:
+                pass
+            return frozenset(codes)
+    except Exception:
+        pass
+
+    return frozenset()  # deny on failure — safer than granting unknown permissions
+
 
 class SessionValidationMiddleware(BaseHTTPMiddleware):
     """
-    Single auth middleware for the gateway.
+    Auth middleware for the gateway.
 
     1. Skips truly public paths (login, register, OAuth, health, internal).
-    2. If a token is present, validates it via Redis cache → auth-service HTTP fallback.
-    3. Decodes the JWT and populates request.state.user_id / user_payload so downstream
-       handlers and AuditMiddleware can use them.
-    4. CQRS routes (/api/v1/*) require a token; backend proxy routes do not.
+    2. Validates the token via Redis cache → auth-service HTTP fallback.
+    3. Decodes the JWT; populates request.state.user_id / user_payload / user_role /
+       user_permissions (frozenset of permission codes fetched from auth-service and
+       cached in Redis — never hardcoded here).
+    4. CQRS routes (/api/v1/*) require a token; other backend proxy routes do not.
+
+    Authorization (permission checks) is enforced at the router level via
+    ``require_permission`` / ``require_permissions`` / ``require_role`` dependencies
+    in ``app/common/dependencies.py``.
     """
 
     def _is_public(self, path: str) -> bool:
@@ -52,11 +114,8 @@ class SessionValidationMiddleware(BaseHTTPMiddleware):
         return request.cookies.get("access_token")
 
     @staticmethod
-    def _unauthorized(message: str) -> JSONResponse:
-        return JSONResponse(
-            status_code=401,
-            content={"success": False, "data": None, "message": message, "errors": None},
-        )
+    def _unauthorized(message: str) -> Response:
+        return ResponseHandler.unauthorized(message)
 
     @staticmethod
     def _hash_token(token: str) -> str:
@@ -90,19 +149,16 @@ class SessionValidationMiddleware(BaseHTTPMiddleware):
             )
             valid: bool = resp.status_code == 200 and resp.json().get("valid", False)
 
-            # Cache the result in Redis so subsequent requests hit the fast path
             try:
-                ttl = 60
                 redis = Redis.from_url(settings.redis_url, decode_responses=False)
-                await redis.setex(cache_key, ttl, "1" if valid else "0")
+                await redis.setex(cache_key, 60, "1" if valid else "0")
                 await redis.aclose()
             except Exception:
                 pass
 
             return valid
         except Exception:
-            # auth-service unavailable — allow through (graceful degradation)
-            return True
+            return True  # auth-service unavailable — allow through (graceful degradation)
 
     async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
         path = request.url.path
@@ -122,9 +178,17 @@ class SessionValidationMiddleware(BaseHTTPMiddleware):
 
         try:
             payload = jwt.decode(token, settings.secret_key, algorithms=[settings.algorithm])
-            request.state.user_id = payload.get("sub")
-            request.state.user_payload = payload
         except JWTError:
             return self._unauthorized("Invalid token")
+
+        request.state.user_id = payload.get("sub")
+        request.state.user_payload = payload
+
+        role: str = payload.get("role", "user")
+        request.state.user_role = role  # consumed by AuditMiddleware
+
+        http_client: httpx.AsyncClient = request.app.state.http_client
+        user_permissions = await _fetch_role_permissions(http_client, role)
+        request.state.user_permissions = user_permissions  # consumed by require_permission()
 
         return await call_next(request)

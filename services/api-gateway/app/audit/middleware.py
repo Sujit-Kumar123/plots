@@ -6,7 +6,7 @@ from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoin
 from starlette.requests import Request
 from starlette.responses import Response
 
-from app.audit.service import log_action
+from app.audit.service.audit_service import log_action
 
 logger = logging.getLogger(__name__)
 

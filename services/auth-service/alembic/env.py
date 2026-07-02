@@ -4,8 +4,6 @@ from logging.config import fileConfig
 from sqlalchemy.ext.asyncio import create_async_engine
 
 from alembic import context
-from app.audit.models import AuditLog  # noqa: F401
-
 # Import all models so Alembic can detect them
 from app.auth.models import (  # noqa: F401
     PasswordResetToken,

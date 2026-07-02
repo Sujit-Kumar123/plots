@@ -118,6 +118,7 @@ services:
       KAFKA_DEFAULT_REPLICATION_FACTOR: 1
       KAFKA_MIN_INSYNC_REPLICAS: 1
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+      KAFKA_HEAP_OPTS: "-Xmx256m -Xms128m"
     volumes:
       - prod_kafka_data:/var/lib/kafka/data
     healthcheck:
@@ -125,7 +126,7 @@ services:
       interval: 10s
       timeout: 10s
       retries: 15
-      start_period: 30s
+      start_period: 60s
     deploy:
       resources:
         limits:

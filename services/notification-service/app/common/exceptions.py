@@ -1,5 +1,6 @@
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
+from app.common.responses import ResponseHandler
 
 
 class AppException(Exception):
@@ -42,12 +43,4 @@ class InternalException(AppException):
 def register_exception_handlers(app: FastAPI) -> None:
     @app.exception_handler(AppException)
     async def app_exception_handler(request: Request, exc: AppException) -> JSONResponse:
-        return JSONResponse(
-            status_code=exc.status_code,
-            content={
-                "success": False,
-                "data": None,
-                "message": exc.message,
-                "errors": exc.errors,
-            },
-        )
+        return ResponseHandler.response(exc.message, errors=exc.errors, status_code=exc.status_code)

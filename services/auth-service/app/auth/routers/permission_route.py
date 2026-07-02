@@ -4,7 +4,7 @@ from math import ceil
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth.dependencies import require_permission
+from app.auth.dependencies import get_current_user
 from app.auth.models import User
 from app.auth.schemas import (
     CreatePermissionRequest,
@@ -14,7 +14,7 @@ from app.auth.schemas import (
 )
 from app.auth.service import PermissionService
 from app.common.pagination import PaginatedResponse, PaginationParams
-from app.common.responses import success_response
+from app.common.responses import ResponseHandler
 from app.database import get_db
 
 router = APIRouter(prefix="/api/auth/permissions", tags=["permissions"])
@@ -30,12 +30,12 @@ router = APIRouter(prefix="/api/auth/permissions", tags=["permissions"])
 )
 async def list_permissions(
     pagination: PaginationParams = Depends(),
-    current_user: User = Depends(require_permission("permissions:read")),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     svc = PermissionService(db)
     perms, total = await svc.list_permissions(pagination)
-    return success_response(
+    return ResponseHandler.ok(
         data=PaginatedResponse(
             items=[PermissionResponse.model_validate(p).model_dump() for p in perms],
             total=total,
@@ -52,12 +52,12 @@ async def list_permissions(
     description="Returns codes from the built-in PERMISSIONS list that are not yet in the database.",
 )
 async def list_missing_permissions(
-    current_user: User = Depends(require_permission("permissions:read")),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     svc = PermissionService(db)
     codes = await svc.list_missing_permission_codes()
-    return success_response(data=codes)
+    return ResponseHandler.ok(data=codes)
 
 
 @router.get(
@@ -67,12 +67,12 @@ async def list_missing_permissions(
 )
 async def get_permission(
     permission_id: uuid.UUID,
-    current_user: User = Depends(require_permission("permissions:read")),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     svc = PermissionService(db)
     perm = await svc.get_permission(permission_id)
-    return success_response(data=PermissionResponse.model_validate(perm).model_dump())
+    return ResponseHandler.ok(data=PermissionResponse.model_validate(perm).model_dump())
 
 
 # ── Create ────────────────────────────────────────────────────────────────────
@@ -82,18 +82,17 @@ async def get_permission(
     "",
     summary="Create permission",
     description="Creates a new permission. `code` must be unique.",
-    status_code=status.HTTP_201_CREATED,
 )
 async def create_permission(
     body: CreatePermissionRequest,
-    current_user: User = Depends(require_permission("permissions:write")),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     svc = PermissionService(db)
     perm = await svc.create_permission(body.name, body.code, body.description)
-    return success_response(
+    return ResponseHandler.created(
+        "Permission created",
         data=PermissionResponse.model_validate(perm).model_dump(),
-        message="Permission created",
     )
 
 
@@ -108,14 +107,14 @@ async def create_permission(
 async def update_permission(
     permission_id: uuid.UUID,
     body: UpdatePermissionRequest,
-    current_user: User = Depends(require_permission("permissions:write")),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     svc = PermissionService(db)
     perm = await svc.update_permission(permission_id, body.name, body.code, body.description)
-    return success_response(
+    return ResponseHandler.ok(
+        "Permission updated",
         data=PermissionResponse.model_validate(perm).model_dump(),
-        message="Permission updated",
     )
 
 
@@ -130,12 +129,12 @@ async def update_permission(
 )
 async def delete_permission(
     permission_id: uuid.UUID,
-    current_user: User = Depends(require_permission("permissions:delete")),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     svc = PermissionService(db)
     await svc.delete_permission(permission_id)
-    return success_response(message="Permission deleted")
+    return ResponseHandler.ok("Permission deleted")
 
 
 # ── Assign / Unassign to Role ─────────────────────────────────────────────────
@@ -149,14 +148,14 @@ async def delete_permission(
 async def assign_to_role(
     permission_id: uuid.UUID,
     role_id: uuid.UUID,
-    current_user: User = Depends(require_permission("permissions:write")),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     svc = PermissionService(db)
     role = await svc.assign_to_role(role_id, permission_id)
-    return success_response(
+    return ResponseHandler.ok(
+        "Permission assigned to role",
         data=RoleWithPermissionsResponse.model_validate(role).model_dump(),
-        message="Permission assigned to role",
     )
 
 
@@ -168,12 +167,12 @@ async def assign_to_role(
 async def unassign_from_role(
     permission_id: uuid.UUID,
     role_id: uuid.UUID,
-    current_user: User = Depends(require_permission("permissions:write")),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     svc = PermissionService(db)
     role = await svc.unassign_from_role(role_id, permission_id)
-    return success_response(
+    return ResponseHandler.ok(
+        "Permission unassigned from role",
         data=RoleWithPermissionsResponse.model_validate(role).model_dump(),
-        message="Permission unassigned from role",
     )

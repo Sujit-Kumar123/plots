@@ -1,19 +1,21 @@
 import asyncio
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
 from fastapi.responses import JSONResponse
 
 from app.common.exceptions import register_exception_handlers
+from app.common.responses import ResponseHandler
 from app.common.internal_auth import InternalAuthMiddleware
 from app.common.logging import setup_logging
 from app.config import settings
 from app.database import check_db_health, engine
-from app.events.publisher import is_producer_ready, start_producer, stop_producer
-from app.projections.consumer import is_consumer_healthy, run_consumer
-from app.routers.chat import router
+from app.chat.events.publisher import is_producer_ready, start_producer, stop_producer
+from app.chat.projections.consumer import is_consumer_healthy, run_consumer
+from app.chat.routers.chat_router import router
 
 _TAGS = [
     {
@@ -80,6 +82,32 @@ app.add_middleware(
 )
 
 register_exception_handlers(app)
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    error_details = exc.errors()
+    field_errors = []
+    for error in error_details:
+        loc = error.get("loc", [])
+        msg = error.get("msg", "Invalid value")
+        if len(loc) > 1 and loc[0] in ("body", "query", "path"):
+            field_name = str(loc[1])
+        else:
+            field_name = str(loc[-1]) if loc else "unknown"
+        field_label = field_name.replace("_", " ").capitalize()
+        replacements = ["string", "number", "integer", "boolean", "field", "value"]
+        custom_msg = msg.lower()
+        for word in replacements:
+            if word.lower() in msg.lower():
+                custom_msg = custom_msg.replace(word.lower(), field_label)
+                break
+        field_errors.append({"field": field_name, "message": custom_msg})
+    return ResponseHandler.unprocessable_entity(
+        message="Please fill all the required fields.", errors=field_errors
+    )
+
+
 app.include_router(router)
 
 

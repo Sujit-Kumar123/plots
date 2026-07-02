@@ -8,7 +8,7 @@ from app.auth.dependencies import get_current_user
 from app.auth.models import User
 from app.auth.service import AzureAuthService
 from app.auth.utils.cookies import set_auth_cookies
-from app.common.responses import success_response
+from app.common.responses import ResponseHandler
 from app.database import get_db
 
 logger = logging.getLogger(__name__)
@@ -60,7 +60,7 @@ async def azure_status(current_user: User = Depends(get_current_user)):
 
     async with async_session_factory() as db:
         svc = AzureAuthService(db)
-        return success_response(data=svc.get_oauth_status(current_user))
+        return ResponseHandler.ok(data=svc.get_oauth_status(current_user))
 
 
 @router.delete("/unlink")
@@ -71,4 +71,4 @@ async def azure_unlink(
     """Unlink Azure account from the current user."""
     svc = AzureAuthService(db)
     await svc.unlink_azure_account(current_user)
-    return success_response(message="Azure account unlinked")
+    return ResponseHandler.ok("Azure account unlinked")

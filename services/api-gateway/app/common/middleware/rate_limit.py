@@ -2,8 +2,9 @@ import structlog
 from redis.asyncio import ConnectionPool, Redis
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.requests import Request
-from starlette.responses import JSONResponse, Response
+from starlette.responses import Response
 
+from app.common.responses import ResponseHandler
 from app.config import settings
 
 logger = structlog.get_logger()
@@ -41,17 +42,10 @@ def _parse_rate(rate_str: str) -> tuple[int, int]:
     return int(count), _PERIOD_SECONDS.get(period, 60)
 
 
-def _too_many(ttl: int) -> JSONResponse:
-    return JSONResponse(
-        status_code=429,
-        content={
-            "success": False,
-            "data": None,
-            "message": "Too many requests. Please try again later.",
-            "errors": None,
-        },
-        headers={"Retry-After": str(ttl)},
-    )
+def _too_many(ttl: int) -> Response:
+    resp = ResponseHandler.too_many_requests("Too many requests. Please try again later.")
+    resp.headers["Retry-After"] = str(ttl)
+    return resp
 
 
 async def _check_limit(redis: Redis, key: str, max_req: int, window: int) -> int | None:

@@ -11,6 +11,30 @@ from app.config import settings
 logger = logging.getLogger(__name__)
 _RETRY_STATUSES = {502, 503, 504}
 
+# Headers that httpx/Starlette manage themselves — strip them from upstream responses
+# so we don't end up with duplicates or stale values.
+_SKIP_RESPONSE_HEADERS = {"content-length", "transfer-encoding", "set-cookie"}
+
+
+def _build_response(resp: httpx.Response) -> Response:
+    """Convert an httpx response to a Starlette Response, preserving all Set-Cookie headers."""
+    # Build a plain-dict of headers, skipping the ones we handle manually
+    headers = {
+        k: v for k, v in resp.headers.items()
+        if k.lower() not in _SKIP_RESPONSE_HEADERS
+    }
+    response = Response(
+        content=resp.content,
+        status_code=resp.status_code,
+        headers=headers,
+        media_type=resp.headers.get("content-type"),
+    )
+    # Forward every Set-Cookie header individually.
+    # dict(resp.headers) collapses duplicate keys so we must use get_list().
+    for cookie in resp.headers.get_list("set-cookie"):
+        response.raw_headers.append((b"set-cookie", cookie.encode("latin-1")))
+    return response
+
 
 async def proxy(request: Request, base_url: str, path: str) -> Response:
     """Forward a request to base_url + path, retrying on 5xx errors."""
@@ -46,12 +70,7 @@ async def proxy(request: Request, base_url: str, path: str) -> Response:
                 params=dict(request.query_params),
             )
             if resp.status_code not in _RETRY_STATUSES:
-                return Response(
-                    content=resp.content,
-                    status_code=resp.status_code,
-                    headers=dict(resp.headers),
-                    media_type=resp.headers.get("content-type"),
-                )
+                return _build_response(resp)
             logger.warning(
                 "Downstream %d on attempt %d/%d for %s %s",
                 resp.status_code, attempt, settings.proxy_max_retries, method, url,
@@ -59,12 +78,7 @@ async def proxy(request: Request, base_url: str, path: str) -> Response:
             if attempt < settings.proxy_max_retries:
                 await asyncio.sleep(0.3 * attempt)
                 continue
-            return Response(
-                content=resp.content,
-                status_code=resp.status_code,
-                headers=dict(resp.headers),
-                media_type=resp.headers.get("content-type"),
-            )
+            return _build_response(resp)
         except (httpx.TimeoutException, httpx.ConnectError) as exc:
             last_exc = exc
             logger.warning(

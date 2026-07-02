@@ -3,7 +3,7 @@ import uuid
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth.dependencies import require_permission
+from app.auth.dependencies import get_current_user
 from app.auth.models import User
 from app.auth.schemas import (
     CreateRoleRequest,
@@ -12,7 +12,7 @@ from app.auth.schemas import (
     UserWithProfileResponse,
 )
 from app.auth.service import RoleService
-from app.common.responses import success_response
+from app.common.responses import ResponseHandler
 from app.database import get_db
 
 router = APIRouter(prefix="/api/auth/roles", tags=["roles"])
@@ -27,12 +27,12 @@ router = APIRouter(prefix="/api/auth/roles", tags=["roles"])
     description="Returns all active roles with their permissions.",
 )
 async def list_roles(
-    current_user: User = Depends(require_permission("roles:read")),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     svc = RoleService(db)
     roles = await svc.list_roles()
-    return success_response(data=[RoleWithPermissionsResponse.model_validate(r).model_dump() for r in roles])
+    return ResponseHandler.ok(data=[RoleWithPermissionsResponse.model_validate(r).model_dump() for r in roles])
 
 
 @router.get(
@@ -42,12 +42,12 @@ async def list_roles(
 )
 async def get_role(
     role_id: uuid.UUID,
-    current_user: User = Depends(require_permission("roles:read")),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     svc = RoleService(db)
     role = await svc.get_role(role_id)
-    return success_response(data=RoleWithPermissionsResponse.model_validate(role).model_dump())
+    return ResponseHandler.ok(data=RoleWithPermissionsResponse.model_validate(role).model_dump())
 
 
 # ── Create ────────────────────────────────────────────────────────────────────
@@ -57,18 +57,17 @@ async def get_role(
     "",
     summary="Create role",
     description="Creates a new role.",
-    status_code=status.HTTP_201_CREATED,
 )
 async def create_role(
     body: CreateRoleRequest,
-    current_user: User = Depends(require_permission("roles:write")),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     svc = RoleService(db)
     role = await svc.create_role(body.name, body.short_name, body.description)
-    return success_response(
+    return ResponseHandler.created(
+        "Role created",
         data=RoleWithPermissionsResponse.model_validate(role).model_dump(),
-        message="Role created",
     )
 
 
@@ -83,14 +82,14 @@ async def create_role(
 async def update_role(
     role_id: uuid.UUID,
     body: UpdateRoleRequest,
-    current_user: User = Depends(require_permission("roles:write")),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     svc = RoleService(db)
     role = await svc.update_role(role_id, body.name, body.short_name, body.description)
-    return success_response(
+    return ResponseHandler.ok(
+        "Role updated",
         data=RoleWithPermissionsResponse.model_validate(role).model_dump(),
-        message="Role updated",
     )
 
 
@@ -105,12 +104,12 @@ async def update_role(
 )
 async def delete_role(
     role_id: uuid.UUID,
-    current_user: User = Depends(require_permission("roles:delete")),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     svc = RoleService(db)
     await svc.delete_role(role_id)
-    return success_response(message="Role deleted")
+    return ResponseHandler.ok("Role deleted")
 
 
 # ── Assign / Unassign ─────────────────────────────────────────────────────────
@@ -124,14 +123,14 @@ async def delete_role(
 async def assign_role(
     role_id: uuid.UUID,
     user_id: uuid.UUID,
-    current_user: User = Depends(require_permission("roles:write")),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     svc = RoleService(db)
     user = await svc.assign_role(user_id, role_id)
-    return success_response(
+    return ResponseHandler.ok(
+        "Role assigned",
         data=UserWithProfileResponse.model_validate(user).model_dump(),
-        message="Role assigned",
     )
 
 
@@ -142,12 +141,12 @@ async def assign_role(
 )
 async def unassign_role(
     user_id: uuid.UUID,
-    current_user: User = Depends(require_permission("roles:write")),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     svc = RoleService(db)
     user = await svc.unassign_role(user_id)
-    return success_response(
+    return ResponseHandler.ok(
+        "Role unassigned",
         data=UserWithProfileResponse.model_validate(user).model_dump(),
-        message="Role unassigned",
     )

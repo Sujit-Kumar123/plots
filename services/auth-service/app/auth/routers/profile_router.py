@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth.dependencies import require_permission
+from app.auth.dependencies import get_current_user
 from app.auth.models import User
 from app.auth.schemas import (
     ChangePasswordRequest,
@@ -11,7 +11,7 @@ from app.auth.schemas import (
     UserWithProfileResponse,
 )
 from app.auth.service import ProfileService
-from app.common.responses import success_response
+from app.common.responses import ResponseHandler
 from app.database import get_db
 
 router = APIRouter(prefix="/api/profile", tags=["profile"])
@@ -23,12 +23,12 @@ router = APIRouter(prefix="/api/profile", tags=["profile"])
     description="Returns the authenticated user's full profile including role.",
 )
 async def get_my_profile(
-    current_user: User = Depends(require_permission("profile:read")),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     svc = ProfileService(db)
     user = await svc.get_user_with_profile(current_user.id)
-    return success_response(data=UserWithProfileResponse.model_validate(user).model_dump())
+    return ResponseHandler.ok(data=UserWithProfileResponse.model_validate(user).model_dump())
 
 
 @router.get(
@@ -37,13 +37,13 @@ async def get_my_profile(
     description="Returns the authenticated user's assigned role, or null if no role is assigned.",
 )
 async def get_my_role(
-    current_user: User = Depends(require_permission("profile:read")),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     svc = ProfileService(db)
     user = await svc.get_user_with_profile(current_user.id)
     data = RoleResponse.model_validate(user.role).model_dump() if user.role else None
-    return success_response(data=data)
+    return ResponseHandler.ok(data=data)
 
 
 @router.get(
@@ -52,13 +52,13 @@ async def get_my_role(
     description="Returns all permissions granted to the authenticated user via their role.",
 )
 async def get_my_permissions(
-    current_user: User = Depends(require_permission("profile:read")),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     svc = ProfileService(db)
     user = await svc.get_user_with_profile(current_user.id)
     permissions = [rp.permission for rp in user.role.role_permissions] if user.role else []
-    return success_response(data=[PermissionResponse.model_validate(p).model_dump() for p in permissions])
+    return ResponseHandler.ok(data=[PermissionResponse.model_validate(p).model_dump() for p in permissions])
 
 
 @router.patch(
@@ -72,7 +72,7 @@ async def get_my_permissions(
 )
 async def update_my_profile(
     body: UpdateProfileRequest,
-    current_user: User = Depends(require_permission("profile:write")),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     svc = ProfileService(db)
@@ -89,9 +89,9 @@ async def update_my_profile(
         photo=body.photo,
     )
     user = await svc.get_user_with_profile(current_user.id)
-    return success_response(
+    return ResponseHandler.ok(
+        "Profile updated",
         data=UserWithProfileResponse.model_validate(user).model_dump(),
-        message="Profile updated",
     )
 
 
@@ -103,9 +103,9 @@ async def update_my_profile(
 )
 async def change_my_password(
     body: ChangePasswordRequest,
-    current_user: User = Depends(require_permission("profile:write")),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     svc = ProfileService(db)
     await svc.change_password(current_user.id, body.current_password, body.new_password)
-    return success_response(message="Password changed successfully")
+    return ResponseHandler.ok("Password changed successfully")

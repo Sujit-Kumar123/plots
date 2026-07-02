@@ -1,11 +1,13 @@
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
 
 from app.common.exceptions import register_exception_handlers
+from app.common.responses import ResponseHandler
 from app.common.health import router as health_router
 from app.common.logging import setup_logging
 from app.config import settings
@@ -100,7 +102,32 @@ app.add_middleware(
 
 register_exception_handlers(app)
 
-from app.audit.router import internal_router as audit_internal_router
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    error_details = exc.errors()
+    field_errors = []
+    for error in error_details:
+        loc = error.get("loc", [])
+        msg = error.get("msg", "Invalid value")
+        if len(loc) > 1 and loc[0] in ("body", "query", "path"):
+            field_name = str(loc[1])
+        else:
+            field_name = str(loc[-1]) if loc else "unknown"
+        field_label = field_name.replace("_", " ").capitalize()
+        replacements = ["string", "number", "integer", "boolean", "field", "value"]
+        custom_msg = msg.lower()
+        for word in replacements:
+            if word.lower() in msg.lower():
+                custom_msg = custom_msg.replace(word.lower(), field_label)
+                break
+        field_errors.append({"field": field_name, "message": custom_msg})
+    return ResponseHandler.unprocessable_entity(
+        message="Please fill all the required fields.", errors=field_errors
+    )
+
+
+from app.auth.routers.internal_router import internal_router
 from app.auth.routers.admin_router import router as admin_router
 from app.auth.routers.auth_route import router as auth_router
 from app.auth.routers.permission_route import router as permission_router
@@ -109,7 +136,7 @@ from app.auth.routers.role_route import router as role_router
 from app.uploads.router import router as uploads_router
 
 app.include_router(health_router)
-app.include_router(audit_internal_router)
+app.include_router(internal_router)
 app.include_router(auth_router)
 app.include_router(profile_router)
 app.include_router(role_router)

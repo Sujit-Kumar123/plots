@@ -34,4 +34,8 @@ PERMISSIONS: list[str] = [
     "sheets:read",
     "sheets:write",
     "sheets:delete",
+    # Chat
+    "chat:read",
+    "chat:write",
+    "chat:delete",
 ]
