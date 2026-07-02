@@ -133,10 +133,13 @@ kind: Service
 metadata:
   name: auth-service
   namespace: plots-system
+  labels:
+    app: auth-service
 spec:
   selector:
     app: auth-service
   ports:
-    - port: 8010
+    - name: http
+      port: 8010
       targetPort: 8010
   type: ClusterIP

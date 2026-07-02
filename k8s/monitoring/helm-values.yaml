@@ -1,0 +1,185 @@
+# kube-prometheus-stack Helm values for Plots microservices platform.
+# Install with:
+#   helm upgrade --install monitoring prometheus-community/kube-prometheus-stack \
+#     --namespace monitoring --create-namespace \
+#     --values k8s/monitoring/helm-values.yaml
+
+prometheus:
+  prometheusSpec:
+    retention: 15d
+    scrapeInterval: 15s
+    evaluationInterval: 15s
+    # Watch ServiceMonitors in ALL namespaces (picks up plots-system ServiceMonitors)
+    serviceMonitorSelectorNilUsesHelmValues: false
+    serviceMonitorSelector: {}
+    serviceMonitorNamespaceSelector: {}
+    podMonitorSelectorNilUsesHelmValues: false
+    podMonitorSelector: {}
+    podMonitorNamespaceSelector: {}
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 50Gi
+    resources:
+      requests:
+        memory: 512Mi
+        cpu: 250m
+      limits:
+        memory: 2Gi
+        cpu: 1000m
+
+grafana:
+  enabled: true
+  # Change this password before deploying to production
+  adminPassword: "changeme-in-prod"
+  persistence:
+    enabled: true
+    size: 10Gi
+  resources:
+    requests:
+      memory: 128Mi
+      cpu: 100m
+    limits:
+      memory: 512Mi
+      cpu: 500m
+  # Pre-load community dashboards via grafana.com IDs
+  dashboardProviders:
+    dashboardproviders.yaml:
+      apiVersion: 1
+      providers:
+        - name: plots
+          orgId: 1
+          folder: Plots
+          type: file
+          disableDeletion: false
+          editable: true
+          options:
+            path: /var/lib/grafana/dashboards/plots
+  dashboards:
+    plots:
+      fastapi-observability:
+        gnetId: 16110
+        revision: 1
+        datasource: Prometheus
+      kubernetes-pods:
+        gnetId: 15761
+        revision: 1
+        datasource: Prometheus
+      node-exporter-full:
+        gnetId: 1860
+        revision: 1
+        datasource: Prometheus
+      kafka-exporter:
+        gnetId: 7589
+        revision: 1
+        datasource: Prometheus
+      postgresql:
+        gnetId: 9628
+        revision: 1
+        datasource: Prometheus
+      redis-exporter:
+        gnetId: 11835
+        revision: 1
+        datasource: Prometheus
+
+alertmanager:
+  enabled: true
+  alertmanagerSpec:
+    storage:
+      volumeClaimTemplate:
+        spec:
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 5Gi
+  config:
+    global:
+      resolve_timeout: 5m
+    route:
+      group_by: ["alertname", "namespace", "job"]
+      group_wait: 30s
+      group_interval: 5m
+      repeat_interval: 12h
+      receiver: "null"
+      routes:
+        - matchers:
+            - alertname =~ "InfoInhibitor|Watchdog"
+          receiver: "null"
+    receivers:
+      - name: "null"
+    inhibit_rules:
+      - source_matchers:
+          - severity = critical
+        target_matchers:
+          - severity =~ warning|info
+        equal: [alertname, namespace, pod]
+
+# Additional alert rules for Plots platform
+additionalPrometheusRulesMap:
+  plots-alerts:
+    groups:
+      - name: plots.service
+        rules:
+          - alert: ServiceDown
+            expr: up{namespace="plots-system"} == 0
+            for: 1m
+            labels:
+              severity: critical
+            annotations:
+              summary: "Service {{ $labels.job }} is down"
+              description: "{{ $labels.job }} in namespace plots-system has been unreachable for 1 minute."
+
+          - alert: HighErrorRate
+            expr: |
+              sum(rate(http_requests_total{namespace="plots-system", status=~"5.."}[5m])) by (job)
+              /
+              sum(rate(http_requests_total{namespace="plots-system"}[5m])) by (job)
+              > 0.05
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: "High 5xx error rate on {{ $labels.job }}"
+              description: "{{ $labels.job }} error rate is above 5% for 5 minutes."
+
+          - alert: HighP99Latency
+            expr: |
+              histogram_quantile(0.99, sum(rate(http_request_duration_seconds_bucket{namespace="plots-system"}[5m])) by (job, le))
+              > 2
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: "High P99 latency on {{ $labels.job }}"
+              description: "P99 latency for {{ $labels.job }} is above 2s."
+
+          - alert: KafkaConsumerLag
+            expr: kafka_consumergroup_lag_sum > 10000
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: "Kafka consumer lag is high"
+              description: "Consumer group {{ $labels.consumergroup }} lag is {{ $value }}."
+
+nodeExporter:
+  enabled: true
+
+# Fix for Docker Desktop on Windows: node-exporter tries to bind-mount /proc and
+# /sys from the host, which do not exist at the expected paths inside Docker Desktop's
+# Linux VM. Disabling hostRootFsMount prevents the CrashLoopBackOff on Windows.
+prometheus-node-exporter:
+  hostRootFsMount:
+    enabled: false
+
+kubeStateMetrics:
+  enabled: true
+
+kubelet:
+  enabled: true
+
+kubeApiServer:
+  enabled: true

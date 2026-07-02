@@ -60,10 +60,13 @@ kind: Service
 metadata:
   name: notification-service
   namespace: plots-system
+  labels:
+    app: notification-service
 spec:
   selector:
     app: notification-service
   ports:
-    - port: 8012
+    - name: http
+      port: 8012
       targetPort: 8012
   type: ClusterIP

@@ -68,10 +68,13 @@ kind: Service
 metadata:
   name: plot-service
   namespace: plots-system
+  labels:
+    app: plot-service
 spec:
   selector:
     app: plot-service
   ports:
-    - port: 8003
+    - name: http
+      port: 8003
       targetPort: 8003
   type: ClusterIP

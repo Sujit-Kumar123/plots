@@ -1,0 +1,1884 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Plots — Kubernetes Monitoring</title>
+<meta name="description" content="Complete setup guide for the Plots monitoring stack: kube-prometheus-stack, Grafana dashboards, ServiceMonitors, and infrastructure exporters.">
+
+<style>
+/* ── Reset ─────────────────────────────────────────────────────────────────── */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+img,svg{max-width:100%;display:block}
+a{color:inherit;text-decoration:none}
+button{cursor:pointer;border:none;background:none;font:inherit}
+
+/* ── Tokens ─────────────────────────────────────────────────────────────────── */
+:root{
+  --bg:        #0B1120;
+  --surface:   #111827;
+  --surface-2: #172032;
+  --surface-3: #1C2840;
+  --border:    #1E3050;
+  --border-hi: #2A4070;
+
+  --write:   #2563EB;
+  --write-lo:#1a3d80;
+  --read:    #0D9488;
+  --read-lo: #0a5c53;
+  --gateway: #7C3AED;
+  --kafka:   #C2872B;
+  --kafka-lo:#6b4510;
+  --infra:   #334155;
+  --danger:  #DC2626;
+  --warn:    #C2872B;
+  --success: #16a34a;
+
+  /* monitoring accent — teal, matching Grafana/Prometheus ecosystem */
+  --monitor:    #0D9488;
+  --monitor-lo: rgba(13,148,136,.08);
+
+  --text:       #B8C9DC;
+  --text-bright:#E2EAF4;
+  --text-muted: #5A7090;
+  --text-code:  #93C5FD;
+
+  --font-body: 'Trebuchet MS','Gill Sans',system-ui,-apple-system,sans-serif;
+  --font-mono: ui-monospace,'Cascadia Code','JetBrains Mono','Fira Code','Courier New',monospace;
+
+  --sidebar-w: 262px;
+  --radius: 6px;
+  --radius-sm: 4px;
+}
+
+/* ── Base ───────────────────────────────────────────────────────────────────── */
+body{
+  background:var(--bg);
+  color:var(--text);
+  font-family:var(--font-body);
+  font-size:14.5px;
+  line-height:1.65;
+  min-height:100vh;
+}
+h1,h2,h3,h4,h5{
+  color:var(--text-bright);
+  font-family:var(--font-body);
+  text-wrap:balance;
+  line-height:1.25;
+}
+h1{font-size:2rem;font-weight:700;letter-spacing:-.02em}
+h2{font-size:1.35rem;font-weight:600;letter-spacing:-.015em;margin-bottom:.9rem;padding-bottom:.5rem;border-bottom:1px solid var(--border)}
+h3{font-size:1.05rem;font-weight:600;margin-bottom:.6rem}
+h4{font-size:.9rem;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:.5rem}
+p{margin-bottom:.75rem;max-width:70ch}
+code{
+  font-family:var(--font-mono);
+  font-size:.82em;
+  color:var(--text-code);
+  background:var(--surface-2);
+  padding:.15em .4em;
+  border-radius:3px;
+  border:1px solid var(--border);
+}
+pre{
+  font-family:var(--font-mono);
+  font-size:.82rem;
+  background:var(--surface-2);
+  border:1px solid var(--border);
+  border-radius:var(--radius);
+  padding:1rem 1.1rem;
+  overflow-x:auto;
+  line-height:1.55;
+  color:#B8C9DC;
+  margin-bottom:1rem;
+}
+pre code{background:none;border:none;padding:0;font-size:1em;color:inherit}
+
+/* ── Layout ─────────────────────────────────────────────────────────────────── */
+.layout{display:flex;min-height:100vh}
+
+.sidebar{
+  position:fixed;top:0;left:0;bottom:0;
+  width:var(--sidebar-w);
+  background:var(--surface);
+  border-right:1px solid var(--border);
+  overflow-y:auto;
+  padding:1.5rem 0 2rem;
+  z-index:40;
+  scrollbar-width:thin;
+  scrollbar-color:var(--border) transparent;
+}
+.sidebar::-webkit-scrollbar{width:4px}
+.sidebar::-webkit-scrollbar-track{background:transparent}
+.sidebar::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+
+.sidebar-logo{
+  padding:.25rem 1.4rem 1.2rem;
+  border-bottom:1px solid var(--border);
+  margin-bottom:.75rem;
+}
+.sidebar-logo .name{
+  font-size:1.1rem;font-weight:700;color:var(--text-bright);letter-spacing:-.02em;display:flex;align-items:center;gap:.45rem;
+}
+.logo-dot{width:10px;height:10px;border-radius:50%;background:var(--monitor);flex-shrink:0}
+.sidebar-logo .sub{font-size:.75rem;color:var(--text-muted);margin-top:.2rem}
+
+.nav-group{margin-bottom:.25rem}
+.nav-group-label{
+  font-size:.68rem;font-weight:600;text-transform:uppercase;letter-spacing:.1em;
+  color:var(--text-muted);padding:.6rem 1.4rem .3rem;display:block;
+}
+.nav-link{
+  display:flex;align-items:center;gap:.55rem;
+  padding:.38rem 1.4rem;
+  font-size:.82rem;color:var(--text-muted);
+  transition:color .15s,background .15s;
+  border-left:2px solid transparent;
+}
+.nav-link:hover{color:var(--text);background:var(--surface-2)}
+.nav-link.active{color:var(--text-bright);border-left-color:var(--monitor);background:var(--monitor-lo)}
+.nav-link .dot{width:6px;height:6px;border-radius:50%;flex-shrink:0;opacity:.6}
+.nav-link.active .dot{opacity:1}
+.dot-monitor{background:var(--monitor)}
+.dot-prom   {background:#e6521f}
+.dot-graf   {background:#f46800}
+.dot-alert  {background:var(--warn)}
+.dot-infra  {background:var(--infra)}
+.dot-none   {background:var(--text-muted)}
+.dot-red    {background:var(--danger)}
+.dot-green  {background:var(--success)}
+
+/* back link */
+.back-link{
+  display:flex;align-items:center;gap:.4rem;
+  padding:.4rem 1.4rem .6rem;
+  font-size:.78rem;color:var(--text-muted);
+  border-bottom:1px solid var(--border);
+  margin-bottom:.5rem;
+}
+.back-link:hover{color:var(--text)}
+.back-link svg{width:12px;height:12px;flex-shrink:0}
+
+.main{
+  margin-left:var(--sidebar-w);
+  flex:1;
+  padding:2.5rem 3rem 4rem;
+  max-width:calc(var(--sidebar-w) + 900px);
+}
+
+/* ── Sections ───────────────────────────────────────────────────────────────── */
+.doc-section{margin-bottom:3.5rem;scroll-margin-top:2rem}
+
+.hero{
+  padding:1.8rem 0 2.2rem;
+  border-bottom:1px solid var(--border);
+  margin-bottom:2.5rem;
+}
+.hero h1{margin-bottom:.5rem}
+.hero p{font-size:1rem;color:var(--text);max-width:62ch;margin-bottom:1.2rem}
+.badge-row{display:flex;flex-wrap:wrap;gap:.45rem}
+
+/* ── Badges ─────────────────────────────────────────────────────────────────── */
+.badge{
+  display:inline-flex;align-items:center;gap:.3rem;
+  font-size:.72rem;font-weight:600;letter-spacing:.05em;text-transform:uppercase;
+  padding:.2em .6em;border-radius:3px;
+  white-space:nowrap;font-family:var(--font-mono);
+}
+.badge-tech    {background:var(--surface-2);color:var(--text);border:1px solid var(--border);text-transform:none;letter-spacing:.02em}
+.badge-green   {background:rgba(22,163,74,.15);color:#4ade80;border:1px solid rgba(22,163,74,.3)}
+.badge-teal    {background:rgba(13,148,136,.15);color:#2dd4bf;border:1px solid rgba(13,148,136,.3)}
+.badge-amber   {background:rgba(194,135,43,.15);color:#fcd34d;border:1px solid rgba(194,135,43,.3)}
+.badge-red     {background:rgba(220,38,38,.15);color:#f87171;border:1px solid rgba(220,38,38,.3)}
+.badge-blue    {background:rgba(37,99,235,.15);color:#60a5fa;border:1px solid rgba(37,99,235,.3)}
+
+/* ── Cards ──────────────────────────────────────────────────────────────────── */
+.card{
+  background:var(--surface-2);border:1px solid var(--border);
+  border-radius:var(--radius);padding:1.2rem 1.4rem;margin-bottom:1rem;
+}
+.card-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:.85rem;margin-bottom:1.5rem}
+
+.comp-card{
+  background:var(--surface-2);
+  border:1px solid var(--border);
+  border-radius:var(--radius);
+  padding:1.1rem 1.3rem;
+  position:relative;
+  overflow:hidden;
+}
+.comp-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px}
+.comp-card.c-prom::before  {background:#e6521f}
+.comp-card.c-graf::before  {background:#f46800}
+.comp-card.c-alert::before {background:var(--warn)}
+.comp-card.c-node::before  {background:var(--infra)}
+.comp-card.c-kafka::before {background:var(--kafka)}
+.comp-card.c-pg::before    {background:var(--write)}
+.comp-card.c-redis::before {background:#dc2626}
+.comp-card.c-ksm::before   {background:var(--monitor)}
+
+.comp-card .comp-name{font-size:.9rem;font-weight:600;color:var(--text-bright);margin-bottom:.2rem}
+.comp-card .comp-port{font-family:var(--font-mono);font-size:.78rem;color:var(--text-muted);margin-bottom:.45rem}
+.comp-card .comp-desc{font-size:.82rem;color:var(--text);line-height:1.5}
+
+/* ── Tables ─────────────────────────────────────────────────────────────────── */
+.table-wrap{overflow-x:auto;border-radius:var(--radius);border:1px solid var(--border);margin-bottom:1.25rem}
+table{width:100%;border-collapse:collapse;font-size:.83rem;font-variant-numeric:tabular-nums}
+thead tr{background:var(--surface-3)}
+thead th{
+  padding:.6rem .85rem;text-align:left;
+  font-size:.7rem;font-weight:600;text-transform:uppercase;letter-spacing:.07em;
+  color:var(--text-muted);white-space:nowrap;
+}
+tbody tr{border-top:1px solid var(--border)}
+tbody tr:hover{background:var(--surface-3)}
+td{padding:.55rem .85rem;color:var(--text);vertical-align:top;line-height:1.5}
+td code{font-size:.78rem}
+td:first-child{color:var(--text-bright)}
+
+/* ── Steps ──────────────────────────────────────────────────────────────────── */
+.steps{display:flex;flex-direction:column;gap:0}
+.step{display:grid;grid-template-columns:34px 1fr;gap:0 18px;position:relative}
+.step:not(:last-child)::before{
+  content:'';position:absolute;left:16px;top:36px;bottom:0;
+  width:1px;background:var(--border);
+}
+.step-num{
+  width:34px;height:34px;border-radius:50%;
+  background:var(--surface-2);border:1px solid var(--border);
+  display:flex;align-items:center;justify-content:center;
+  font-size:.78rem;font-weight:700;color:var(--monitor);
+  flex-shrink:0;font-family:var(--font-mono);position:relative;z-index:1;
+}
+.step-body{padding-bottom:2rem}
+.step-title{font-size:.95rem;font-weight:600;color:var(--text-bright);line-height:34px;margin-bottom:.45rem}
+.step-desc{font-size:.84rem;color:var(--text-muted);line-height:1.6;margin-bottom:.6rem}
+
+/* ── Callout ─────────────────────────────────────────────────────────────────── */
+.callout{
+  background:var(--surface-2);border-left:3px solid var(--monitor);
+  border-radius:0 var(--radius) var(--radius) 0;
+  padding:.75rem 1rem;margin-bottom:1rem;font-size:.85rem;
+}
+.callout.warn  {border-left-color:var(--warn)}
+.callout.danger{border-left-color:var(--danger)}
+.callout.ok    {border-left-color:var(--success)}
+.callout strong{color:var(--text-bright)}
+
+/* ── Architecture diagram ────────────────────────────────────────────────────── */
+.arch-wrap{
+  background:var(--surface-2);border:1px solid var(--border);
+  border-radius:var(--radius);padding:1.5rem 1rem 1rem;
+  margin-bottom:1.5rem;overflow-x:auto;
+}
+.arch-wrap svg{min-width:640px;display:block;margin:0 auto}
+
+/* ── Access cards ────────────────────────────────────────────────────────────── */
+.access-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:.85rem;margin-bottom:1.5rem}
+.access-card{
+  background:var(--surface-2);border:1px solid var(--border);
+  border-radius:var(--radius);padding:1.1rem 1.3rem;
+}
+.access-card .ac-name {font-size:.9rem;font-weight:600;color:var(--text-bright);margin-bottom:.3rem}
+.access-card .ac-url  {font-family:var(--font-mono);font-size:.8rem;color:var(--monitor);margin-bottom:.3rem}
+.access-card .ac-cred {font-size:.78rem;color:var(--text-muted);margin-bottom:.8rem}
+.access-card pre{margin-bottom:0;font-size:.75rem;padding:.7rem .85rem}
+
+/* ── Copy button ─────────────────────────────────────────────────────────────── */
+.code-wrap{position:relative;margin-bottom:1rem}
+.code-wrap pre{margin-bottom:0}
+.copy-btn{
+  position:absolute;top:7px;right:7px;
+  background:var(--surface-3);border:1px solid var(--border);
+  color:var(--text-muted);font-size:.7rem;font-family:var(--font-body);
+  padding:.2em .55em;border-radius:3px;
+  transition:color .15s,background .15s;
+  opacity:0;transition:opacity .15s;
+}
+.code-wrap:hover .copy-btn{opacity:1}
+.copy-btn:hover{color:var(--text);background:var(--border)}
+.copy-btn.copied{color:#4ade80;border-color:rgba(22,163,74,.4);opacity:1}
+
+/* ── Dashboard cards ─────────────────────────────────────────────────────────── */
+.dash-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:.85rem;margin-bottom:1.5rem}
+.dash-card{background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius);padding:1rem 1.2rem}
+.dash-card .dash-id  {font-family:var(--font-mono);font-size:.73rem;color:var(--monitor);margin-bottom:.3rem}
+.dash-card .dash-name{font-size:.88rem;font-weight:600;color:var(--text-bright);margin-bottom:.35rem}
+.dash-card .dash-desc{font-size:.8rem;color:var(--text);line-height:1.5}
+
+/* ── Misc ─────────────────────────────────────────────────────────────────────── */
+.two-col{display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1rem}
+.file-tree{
+  font-family:var(--font-mono);font-size:.8rem;line-height:1.9;
+  background:var(--surface-2);border:1px solid var(--border);
+  border-radius:var(--radius);padding:1rem 1.2rem;margin-bottom:1rem;
+}
+.file-tree .ft-dir {color:var(--monitor)}
+.file-tree .ft-file{color:var(--text-bright)}
+.file-tree .ft-desc{color:var(--text-muted);font-family:var(--font-body);font-size:.78rem;margin-left:1rem}
+.ft-i1{padding-left:1.2rem;display:block}
+.ft-i2{padding-left:2.4rem;display:block}
+
+@media(max-width:820px){
+  .sidebar{transform:translateX(-100%)}
+  .main{margin-left:0;padding:1.5rem 1.2rem 3rem}
+  .two-col{grid-template-columns:1fr}
+}
+@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<div class="layout">
+
+<!-- ══════════════════════  SIDEBAR  ══════════════════════ -->
+<nav class="sidebar">
+  <div class="sidebar-logo">
+    <div class="name"><span class="logo-dot"></span>Plots</div>
+    <div class="sub">Monitoring &amp; Observability</div>
+  </div>
+
+  <a href="index.html" class="back-link">
+    <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M7.5 1.5L3 6l4.5 4.5"/></svg>
+    Back to docs index
+  </a>
+
+  <div class="nav-group">
+    <a href="#overview"      class="nav-link"><span class="dot dot-monitor"></span>Overview</a>
+    <a href="#architecture"  class="nav-link"><span class="dot dot-monitor"></span>Architecture</a>
+  </div>
+
+  <div class="nav-group">
+    <span class="nav-group-label">Setup</span>
+    <a href="#prerequisites" class="nav-link"><span class="dot dot-none"></span>Prerequisites</a>
+    <a href="#installation"  class="nav-link"><span class="dot dot-none"></span>Installation</a>
+  </div>
+
+  <div class="nav-group">
+    <span class="nav-group-label">Usage</span>
+    <a href="#helm-config"   class="nav-link"><span class="dot dot-monitor"></span>Helm Configuration</a>
+    <a href="#helm-prometheus" class="nav-link" style="padding-left:2.2rem"><span class="dot dot-prom"></span>Prometheus</a>
+    <a href="#helm-grafana"   class="nav-link" style="padding-left:2.2rem"><span class="dot dot-graf"></span>Grafana</a>
+    <a href="#helm-alertmgr"  class="nav-link" style="padding-left:2.2rem"><span class="dot dot-alert"></span>Alertmanager</a>
+    <a href="#helm-rules"     class="nav-link" style="padding-left:2.2rem"><span class="dot dot-alert"></span>Alert Rules PromQL</a>
+    <a href="#access"        class="nav-link"><span class="dot dot-graf"></span>Accessing UIs</a>
+    <a href="#dashboards"    class="nav-link"><span class="dot dot-graf"></span>Dashboards</a>
+    <a href="#alerts"        class="nav-link"><span class="dot dot-alert"></span>Alert Rules</a>
+  </div>
+
+  <div class="nav-group">
+    <span class="nav-group-label">Reference</span>
+    <a href="#servicemonitors" class="nav-link"><span class="dot dot-prom"></span>ServiceMonitors</a>
+    <a href="#exporters"       class="nav-link"><span class="dot dot-infra"></span>Exporters</a>
+    <a href="#troubleshooting" class="nav-link"><span class="dot dot-none"></span>Troubleshooting</a>
+    <a href="#suspend"         class="nav-link"><span class="dot dot-monitor"></span>Suspend (no delete)</a>
+    <a href="#restart"         class="nav-link"><span class="dot dot-green"></span>Restart from Docker</a>
+    <a href="#teardown"        class="nav-link"><span class="dot dot-red"></span>Teardown</a>
+    <a href="#files"           class="nav-link"><span class="dot dot-none"></span>File Reference</a>
+  </div>
+</nav>
+
+<!-- ══════════════════════  MAIN  ══════════════════════ -->
+<main class="main">
+
+<!-- ── HERO ─────────────────────────────────────────── -->
+<div class="hero" id="overview">
+  <h1>Kubernetes Monitoring</h1>
+  <p>Full observability for all 6 Plots microservices — request metrics, Kafka consumer lag, PostgreSQL health, and Redis performance — via a single Helm chart deployment.</p>
+  <div class="badge-row">
+    <span class="badge badge-tech">kube-prometheus-stack</span>
+    <span class="badge badge-tech">Prometheus 2.x</span>
+    <span class="badge badge-tech">Grafana 11.x</span>
+    <span class="badge badge-tech">Alertmanager</span>
+    <span class="badge badge-tech">Helm 3</span>
+    <span class="badge badge-tech">Kubernetes 1.27+</span>
+  </div>
+</div>
+
+<!-- ── COMPONENTS ────────────────────────────────────── -->
+<section class="doc-section" id="overview-components">
+  <h2>Stack components</h2>
+  <p>One Helm release installs the full observability stack. Three infrastructure exporters are deployed separately into <code>plots-system</code> so they can read existing K8s secrets.</p>
+
+  <div class="card-grid">
+    <div class="comp-card c-prom">
+      <div class="comp-name">Prometheus</div>
+      <div class="comp-port">:9090</div>
+      <div class="comp-desc">Scrapes and stores all metrics. Evaluates alert rules. 15-day retention, 50 Gi PVC.</div>
+    </div>
+    <div class="comp-card c-graf">
+      <div class="comp-name">Grafana</div>
+      <div class="comp-port">:3000</div>
+      <div class="comp-desc">Visualization layer. 6 dashboards pre-loaded from grafana.com on first boot.</div>
+    </div>
+    <div class="comp-card c-alert">
+      <div class="comp-name">Alertmanager</div>
+      <div class="comp-port">:9093</div>
+      <div class="comp-desc">Deduplicates and routes alerts. Configured with a null receiver by default — add Slack/email as needed.</div>
+    </div>
+    <div class="comp-card c-node">
+      <div class="comp-name">node-exporter</div>
+      <div class="comp-port">:9100</div>
+      <div class="comp-desc">Host-level CPU, memory, disk I/O, and network metrics for every node in the cluster.</div>
+    </div>
+    <div class="comp-card c-ksm">
+      <div class="comp-name">kube-state-metrics</div>
+      <div class="comp-port">:8080</div>
+      <div class="comp-desc">Kubernetes object states — Deployment replicas, Pod phase, HPA min/max, PVC status.</div>
+    </div>
+    <div class="comp-card c-kafka">
+      <div class="comp-name">kafka-exporter</div>
+      <div class="comp-port">:9308</div>
+      <div class="comp-desc">Kafka topic lag, consumer group offsets, partition leader distribution.</div>
+    </div>
+    <div class="comp-card c-pg">
+      <div class="comp-name">postgres-exporter</div>
+      <div class="comp-port">:9187</div>
+      <div class="comp-desc">Active connections, transaction rate, cache hit ratio, table bloat, deadlock count.</div>
+    </div>
+    <div class="comp-card c-redis">
+      <div class="comp-name">redis-exporter</div>
+      <div class="comp-port">:9121</div>
+      <div class="comp-desc">Memory used, connected clients, commands per second, keyspace hits and evictions.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ── ARCHITECTURE ───────────────────────────────────── -->
+<section class="doc-section" id="architecture">
+  <h2>Architecture</h2>
+  <p>Every FastAPI service exposes <code>/metrics</code> on its existing port via <code>prometheus-fastapi-instrumentator</code>. Prometheus Operator reads <strong>ServiceMonitor</strong> custom resources to discover scrape targets — no manual <code>scrape_configs</code> required.</p>
+
+  <div class="arch-wrap">
+    <svg viewBox="0 0 720 340" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Monitoring architecture diagram">
+      <defs>
+        <marker id="am" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
+          <path d="M0,0 L7,3.5 L0,7 Z" fill="#0D9488"/>
+        </marker>
+        <marker id="ap" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
+          <path d="M0,0 L7,3.5 L0,7 Z" fill="#5A7090"/>
+        </marker>
+        <marker id="ag" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
+          <path d="M0,0 L7,3.5 L0,7 Z" fill="#f46800"/>
+        </marker>
+      </defs>
+
+      <!-- LEFT: App services -->
+      <text x="10" y="20" fill="#5A7090" font-size="9" font-family="Trebuchet MS,system-ui,sans-serif" font-weight="600" text-transform="uppercase" letter-spacing="1">APP SERVICES</text>
+      <rect x="10"  y="28"  width="152" height="26" rx="4" fill="#172032" stroke="#1E3050" stroke-width="1"/>
+      <text x="86"  y="46"  text-anchor="middle" fill="#B8C9DC" font-size="10.5" font-family="ui-monospace,monospace">api-gateway :8000</text>
+      <rect x="10"  y="60"  width="152" height="26" rx="4" fill="#172032" stroke="#1E3050" stroke-width="1"/>
+      <text x="86"  y="78"  text-anchor="middle" fill="#B8C9DC" font-size="10.5" font-family="ui-monospace,monospace">auth-service :8010</text>
+      <rect x="10"  y="92"  width="152" height="26" rx="4" fill="#172032" stroke="#1E3050" stroke-width="1"/>
+      <text x="86"  y="110" text-anchor="middle" fill="#B8C9DC" font-size="10.5" font-family="ui-monospace,monospace">chat-service :8001</text>
+      <rect x="10"  y="124" width="152" height="26" rx="4" fill="#172032" stroke="#1E3050" stroke-width="1"/>
+      <text x="86"  y="142" text-anchor="middle" fill="#B8C9DC" font-size="10.5" font-family="ui-monospace,monospace">plot-service :8003</text>
+      <rect x="10"  y="156" width="152" height="26" rx="4" fill="#172032" stroke="#1E3050" stroke-width="1"/>
+      <text x="86"  y="174" text-anchor="middle" fill="#B8C9DC" font-size="10.5" font-family="ui-monospace,monospace">payment :8011</text>
+      <rect x="10"  y="188" width="152" height="26" rx="4" fill="#172032" stroke="#1E3050" stroke-width="1"/>
+      <text x="86"  y="206" text-anchor="middle" fill="#B8C9DC" font-size="10.5" font-family="ui-monospace,monospace">notification :8012</text>
+
+      <!-- LEFT: Exporters -->
+      <text x="10" y="240" fill="#5A7090" font-size="9" font-family="Trebuchet MS,system-ui,sans-serif" font-weight="600" letter-spacing="1">EXPORTERS</text>
+      <rect x="10"  y="248" width="152" height="26" rx="4" fill="#172032" stroke="#6b4510" stroke-width="1"/>
+      <text x="86"  y="266" text-anchor="middle" fill="#fcd34d" font-size="10.5" font-family="ui-monospace,monospace">kafka-exporter :9308</text>
+      <rect x="10"  y="280" width="152" height="26" rx="4" fill="#172032" stroke="#1a3d80" stroke-width="1"/>
+      <text x="86"  y="298" text-anchor="middle" fill="#60a5fa" font-size="10.5" font-family="ui-monospace,monospace">postgres-exporter :9187</text>
+      <rect x="10"  y="312" width="152" height="26" rx="4" fill="#172032" stroke="#7b1d1d" stroke-width="1"/>
+      <text x="86"  y="330" text-anchor="middle" fill="#f87171" font-size="10.5" font-family="ui-monospace,monospace">redis-exporter :9121</text>
+
+      <!-- Arrows: services → /metrics label -->
+      <line x1="162" y1="109" x2="236" y2="109" stroke="#0D9488" stroke-width="1" marker-end="url(#am)"/>
+      <line x1="162" y1="289" x2="236" y2="289" stroke="#0D9488" stroke-width="1" marker-end="url(#am)"/>
+
+      <!-- /metrics pill -->
+      <rect x="238" y="95" width="68" height="28" rx="4" fill="#0a5c53" stroke="#0D9488" stroke-width="1"/>
+      <text x="272" y="114" text-anchor="middle" fill="#2dd4bf" font-size="11" font-family="ui-monospace,monospace">/metrics</text>
+      <rect x="238" y="275" width="68" height="28" rx="4" fill="#0a5c53" stroke="#0D9488" stroke-width="1"/>
+      <text x="272" y="294" text-anchor="middle" fill="#2dd4bf" font-size="11" font-family="ui-monospace,monospace">/metrics</text>
+
+      <!-- Arrows: /metrics → ServiceMonitor -->
+      <line x1="306" y1="109" x2="370" y2="170" stroke="#5A7090" stroke-width="1" marker-end="url(#ap)"/>
+      <line x1="306" y1="289" x2="370" y2="200" stroke="#5A7090" stroke-width="1" marker-end="url(#ap)"/>
+
+      <!-- ServiceMonitor box -->
+      <rect x="372" y="155" width="120" height="58" rx="5" fill="#172032" stroke="#0D9488" stroke-width="1.5"/>
+      <text x="432" y="180" text-anchor="middle" fill="#2dd4bf" font-size="11" font-family="Trebuchet MS,system-ui,sans-serif" font-weight="600">Service</text>
+      <text x="432" y="196" text-anchor="middle" fill="#2dd4bf" font-size="11" font-family="Trebuchet MS,system-ui,sans-serif" font-weight="600">Monitor</text>
+      <text x="432" y="208" text-anchor="middle" fill="#5A7090" font-size="8.5" font-family="ui-monospace,monospace">CRD × 9</text>
+
+      <!-- Arrow: ServiceMonitor → Prometheus -->
+      <line x1="492" y1="184" x2="556" y2="184" stroke="#0D9488" stroke-width="1.5" marker-end="url(#am)"/>
+
+      <!-- Prometheus box -->
+      <rect x="558" y="155" width="118" height="58" rx="5" fill="#172032" stroke="#e6521f" stroke-width="1.5"/>
+      <text x="617" y="180" text-anchor="middle" fill="#E2EAF4" font-size="11" font-family="Trebuchet MS,system-ui,sans-serif" font-weight="600">Prometheus</text>
+      <text x="617" y="196" text-anchor="middle" fill="#5A7090" font-size="8.5" font-family="ui-monospace,monospace">:9090 · 15d retention</text>
+      <text x="617" y="208" text-anchor="middle" fill="#5A7090" font-size="8.5" font-family="ui-monospace,monospace">50 Gi PVC</text>
+
+      <!-- Arrow: Prometheus → Grafana -->
+      <line x1="617" y1="213" x2="617" y2="256" stroke="#f46800" stroke-width="1" marker-end="url(#ag)"/>
+      <!-- Grafana box -->
+      <rect x="558" y="258" width="118" height="42" rx="5" fill="#172032" stroke="#f46800" stroke-width="1.5"/>
+      <text x="617" y="279" text-anchor="middle" fill="#E2EAF4" font-size="11" font-family="Trebuchet MS,system-ui,sans-serif" font-weight="600">Grafana</text>
+      <text x="617" y="293" text-anchor="middle" fill="#5A7090" font-size="8.5" font-family="ui-monospace,monospace">:3000 · 6 dashboards</text>
+
+      <!-- Arrow: Prometheus → Alertmanager -->
+      <line x1="617" y1="155" x2="617" y2="112" stroke="#C2872B" stroke-width="1" marker-end="url(#ag)"/>
+      <!-- Alertmanager box -->
+      <rect x="558" y="68" width="118" height="42" rx="5" fill="#172032" stroke="#C2872B" stroke-width="1.5"/>
+      <text x="617" y="89"  text-anchor="middle" fill="#E2EAF4" font-size="11" font-family="Trebuchet MS,system-ui,sans-serif" font-weight="600">Alertmanager</text>
+      <text x="617" y="103" text-anchor="middle" fill="#5A7090" font-size="8.5" font-family="ui-monospace,monospace">:9093 · 4 rules</text>
+    </svg>
+  </div>
+</section>
+
+<!-- ── PREREQUISITES ─────────────────────────────────── -->
+<section class="doc-section" id="prerequisites">
+  <h2>Prerequisites</h2>
+
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Tool</th><th>Minimum version</th><th>Verify command</th></tr></thead>
+      <tbody>
+        <tr><td>Docker Desktop</td><td>4.x — Kubernetes enabled</td><td><code>docker info</code></td></tr>
+        <tr><td>kubectl</td><td>1.27+</td><td><code>kubectl version --client</code></td></tr>
+        <tr><td>Helm</td><td>3.12+</td><td><code>helm version</code></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Enable Kubernetes in Docker Desktop</h3>
+  <p>Open Docker Desktop → <strong>Settings (gear icon)</strong> → <strong>Kubernetes</strong> → check <strong>Enable Kubernetes</strong> → <strong>Apply &amp; Restart</strong>. Wait ~2 minutes for the cluster status to turn green.</p>
+
+  <h3>Install Helm on Windows</h3>
+  <div class="code-wrap">
+    <pre><span style="color:#5A7090"># Run in PowerShell</span>
+New-Item -ItemType Directory -Force "$env:USERPROFILE\bin"
+Invoke-WebRequest "https://get.helm.sh/helm-v3.21.2-windows-amd64.zip" -OutFile "$env:TEMP\helm.zip"
+Expand-Archive "$env:TEMP\helm.zip" -DestinationPath "$env:TEMP\helm-extract" -Force
+Copy-Item "$env:TEMP\helm-extract\windows-amd64\helm.exe" "$env:USERPROFILE\bin\helm.exe"
+$p = [Environment]::GetEnvironmentVariable("PATH","User")
+[Environment]::SetEnvironmentVariable("PATH","$p;$env:USERPROFILE\bin","User")</pre>
+    <button class="copy-btn">Copy</button>
+  </div>
+  <div class="callout">Restart Git Bash after updating PATH, then verify with <code>helm version</code>.</div>
+
+  <h3>Verify cluster connectivity</h3>
+  <div class="code-wrap">
+    <pre>kubectl cluster-info
+<span style="color:#5A7090"># Kubernetes control plane is running at https://127.0.0.1:6443</span></pre>
+    <button class="copy-btn">Copy</button>
+  </div>
+</section>
+
+<!-- ── INSTALLATION ──────────────────────────────────── -->
+<section class="doc-section" id="installation">
+  <h2>Installation</h2>
+  <p>Run the install script from the project root to deploy everything in one shot. The steps below explain what the script does.</p>
+
+  <div class="callout ok">
+    <strong>One-command install:</strong> <code>bash k8s/monitoring/install.sh</code>
+  </div>
+
+  <div class="steps">
+    <div class="step">
+      <div class="step-num">1</div>
+      <div class="step-body">
+        <div class="step-title">Add the Helm repository</div>
+        <div class="step-desc">Registers <code>prometheus-community</code> so Helm can pull the chart.</div>
+        <div class="code-wrap">
+          <pre>helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+helm repo update</pre>
+          <button class="copy-btn">Copy</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">2</div>
+      <div class="step-body">
+        <div class="step-title">Install kube-prometheus-stack</div>
+        <div class="step-desc">Deploys Prometheus, Grafana, Alertmanager, node-exporter, and kube-state-metrics into the <code>monitoring</code> namespace. Uses custom values from <code>k8s/monitoring/helm-values.yaml</code>.</div>
+        <div class="code-wrap">
+          <pre>helm upgrade --install monitoring prometheus-community/kube-prometheus-stack \
+  --namespace monitoring \
+  --create-namespace \
+  --values k8s/monitoring/helm-values.yaml \
+  --wait --timeout 10m</pre>
+          <button class="copy-btn">Copy</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">3</div>
+      <div class="step-body">
+        <div class="step-title">Create the plots-system namespace</div>
+        <div class="step-desc">The exporters and app services live here. Must exist before applying subsequent resources.</div>
+        <div class="code-wrap">
+          <pre>kubectl apply -f k8s/namespace.yaml</pre>
+          <button class="copy-btn">Copy</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">4</div>
+      <div class="step-body">
+        <div class="step-title">Deploy infrastructure exporters</div>
+        <div class="step-desc">Kafka, PostgreSQL, and Redis exporters deployed into <code>plots-system</code>. They read credentials from the <code>plots-secrets</code> Secret.</div>
+        <div class="code-wrap">
+          <pre>kubectl apply -f k8s/monitoring/exporters.yaml</pre>
+          <button class="copy-btn">Copy</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">5</div>
+      <div class="step-body">
+        <div class="step-title">Apply ServiceMonitors</div>
+        <div class="step-desc">Creates ServiceMonitor CRDs for all 6 app services and the 3 exporters. Prometheus Operator picks these up automatically — no restart needed.</div>
+        <div class="code-wrap">
+          <pre>kubectl apply -f k8s/monitoring/servicemonitors.yaml</pre>
+          <button class="copy-btn">Copy</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">6</div>
+      <div class="step-body">
+        <div class="step-title">Verify pod status</div>
+        <div class="step-desc">Check both namespaces. See the expected output and explanations below.</div>
+        <div class="code-wrap">
+          <pre>kubectl get pods -n monitoring
+kubectl get pods -n plots-system</pre>
+          <button class="copy-btn">Copy</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <h3>Expected pod states after a fresh install</h3>
+  <p>This is the actual output from a first install on Docker Desktop. Not all pods will be <code>Running</code> immediately — several failures are expected until the app services and their secrets are deployed.</p>
+
+  <div class="code-wrap">
+    <pre><span style="color:#5A7090">$ kubectl get pods -n monitoring</span>
+NAME                                                     READY   STATUS             RESTARTS
+alertmanager-monitoring-kube-prometheus-alertmanager-0   2/2     Running            0
+monitoring-grafana-798b9f4b54-8vsmm                      3/3     Running            0
+monitoring-kube-prometheus-operator-5c4574b496-4jgm6     1/1     Running            0
+monitoring-kube-state-metrics-78447bcc76-vjhx6           1/1     Running            0
+monitoring-prometheus-node-exporter-frk2k                0/1     CrashLoopBackOff   11
+prometheus-monitoring-kube-prometheus-prometheus-0       2/2     Running            0
+
+<span style="color:#5A7090">$ kubectl get pods -n plots-system</span>
+NAME                                 READY   STATUS                       RESTARTS
+kafka-exporter-86cc9d6c48-2fhrp      0/1     Error                        0
+postgres-exporter-79d7d65cd6-rlpz5   0/1     CreateContainerConfigError   0
+redis-exporter-8454859bbb-thscv      0/1     CreateContainerConfigError   0</pre>
+    <button class="copy-btn">Copy</button>
+  </div>
+
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Pod</th><th>Status</th><th>Cause</th><th>When it fixes itself</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><code>alertmanager-*</code></td>
+          <td><span class="badge badge-green">Running 2/2</span></td>
+          <td>—</td><td>Ready now</td>
+        </tr>
+        <tr>
+          <td><code>monitoring-grafana-*</code></td>
+          <td><span class="badge badge-green">Running 3/3</span></td>
+          <td>—</td><td>Ready now</td>
+        </tr>
+        <tr>
+          <td><code>monitoring-kube-prometheus-operator-*</code></td>
+          <td><span class="badge badge-green">Running 1/1</span></td>
+          <td>—</td><td>Ready now</td>
+        </tr>
+        <tr>
+          <td><code>monitoring-kube-state-metrics-*</code></td>
+          <td><span class="badge badge-green">Running 1/1</span></td>
+          <td>—</td><td>Ready now</td>
+        </tr>
+        <tr>
+          <td><code>prometheus-monitoring-*</code></td>
+          <td><span class="badge badge-green">Running 2/2</span></td>
+          <td>—</td><td>Ready now</td>
+        </tr>
+        <tr>
+          <td><code>monitoring-prometheus-node-exporter-*</code></td>
+          <td><span class="badge badge-red">CrashLoopBackOff</span></td>
+          <td>Docker Desktop on Windows does not expose <code>/proc</code> and <code>/sys</code> at the paths node-exporter expects</td>
+          <td>Fix in <code>helm-values.yaml</code> — see below</td>
+        </tr>
+        <tr>
+          <td><code>kafka-exporter-*</code></td>
+          <td><span class="badge badge-red">Error</span></td>
+          <td>Trying to connect to <code>kafka:9092</code> which doesn't exist yet (app services not deployed)</td>
+          <td>Automatically recovers when Kafka is deployed</td>
+        </tr>
+        <tr>
+          <td><code>postgres-exporter-*</code></td>
+          <td><span class="badge badge-red">CreateContainerConfigError</span></td>
+          <td><code>plots-secrets</code> Secret does not exist in <code>plots-system</code> yet — Kubernetes can't inject the env vars</td>
+          <td>Automatically recovers when app secrets are created</td>
+        </tr>
+        <tr>
+          <td><code>redis-exporter-*</code></td>
+          <td><span class="badge badge-red">CreateContainerConfigError</span></td>
+          <td>Same as above — <code>plots-secrets</code> missing</td>
+          <td>Automatically recovers when app secrets are created</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="callout ok">
+    <strong>Grafana is usable right now.</strong> Prometheus, Grafana, Alertmanager, and kube-state-metrics are all <code>Running</code>. The exporter failures are expected at this stage and do not block dashboard access.
+  </div>
+
+  <h3>Fix node-exporter CrashLoopBackOff on Docker Desktop</h3>
+  <p>Add the following to <code>k8s/monitoring/helm-values.yaml</code> (already included as of the latest version of the file) then re-run <code>helm upgrade</code>:</p>
+  <div class="code-wrap">
+    <pre><span style="color:#5A7090"># Disables the host filesystem mount that causes CrashLoopBackOff on Windows</span>
+prometheus-node-exporter:
+  hostRootFsMount:
+    enabled: false</pre>
+    <button class="copy-btn">Copy</button>
+  </div>
+  <div class="code-wrap">
+    <pre>helm upgrade monitoring prometheus-community/kube-prometheus-stack \
+  --namespace monitoring \
+  --values k8s/monitoring/helm-values.yaml</pre>
+    <button class="copy-btn">Copy</button>
+  </div>
+
+  <h3>Access Grafana (port-forward)</h3>
+  <p>Run in a separate terminal and keep it open while browsing. Grafana is available immediately after the install even while the exporters are still failing.</p>
+  <div class="code-wrap">
+    <pre>kubectl port-forward svc/monitoring-grafana 3000:80 -n monitoring
+<span style="color:#5A7090"># Forwarding from 127.0.0.1:3000 -> 3000
+# Open http://localhost:3000  (admin / changeme-in-prod)</span></pre>
+    <button class="copy-btn">Copy</button>
+  </div>
+</section>
+
+<!-- ── HELM CONFIGURATION ─────────────────────────────── -->
+<section class="doc-section" id="helm-config">
+  <h2>Helm configuration</h2>
+  <p>All chart behaviour is controlled through <code>k8s/monitoring/helm-values.yaml</code>. The file is passed to <code>helm upgrade --install</code> via <code>--values</code> and overrides the upstream chart defaults. Below is a tour of every block and the reasoning behind each setting.</p>
+
+  <div class="callout">
+    <strong>Chart:</strong> <code>prometheus-community/kube-prometheus-stack</code> &nbsp;·&nbsp;
+    <strong>Release name:</strong> <code>monitoring</code> &nbsp;·&nbsp;
+    <strong>Namespace:</strong> <code>monitoring</code>
+  </div>
+
+  <!-- ── Prometheus ── -->
+  <h3 id="helm-prometheus">Prometheus</h3>
+  <p>The <code>prometheus.prometheusSpec</code> block configures the Prometheus StatefulSet that the Prometheus Operator creates.</p>
+
+  <div class="code-wrap">
+    <pre>prometheus:
+  prometheusSpec:
+    retention: 15d             <span style="color:#5A7090"># keep metrics for 15 days</span>
+    scrapeInterval: 15s        <span style="color:#5A7090"># poll targets every 15 s (default 60 s)</span>
+    evaluationInterval: 15s   <span style="color:#5A7090"># evaluate alert rules every 15 s</span>
+
+    <span style="color:#5A7090"># Watch ServiceMonitors in ALL namespaces.
+    # Without these three settings Prometheus only watches ServiceMonitors
+    # that have the label  release: monitoring  AND live in the monitoring namespace.</span>
+    serviceMonitorSelectorNilUsesHelmValues: false
+    serviceMonitorSelector: {}
+    serviceMonitorNamespaceSelector: {}
+
+    <span style="color:#5A7090"># Same for PodMonitors (not used yet, but keeps the door open).</span>
+    podMonitorSelectorNilUsesHelmValues: false
+    podMonitorSelector: {}
+    podMonitorNamespaceSelector: {}
+
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 50Gi  <span style="color:#5A7090"># PVC created automatically by the operator</span>
+
+    resources:
+      requests:
+        memory: 512Mi
+        cpu: 250m
+      limits:
+        memory: 2Gi
+        cpu: 1000m</pre>
+    <button class="copy-btn">Copy</button>
+  </div>
+
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Key</th><th>Value</th><th>Why</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><code>retention</code></td><td><code>15d</code></td>
+          <td>Balances storage cost against enough history to investigate weekly trends. Increase to <code>30d</code> in production.</td>
+        </tr>
+        <tr>
+          <td><code>scrapeInterval</code></td><td><code>15s</code></td>
+          <td>Fast enough to catch short request spikes on the FastAPI services without heavy CPU overhead.</td>
+        </tr>
+        <tr>
+          <td><code>serviceMonitorSelectorNilUsesHelmValues</code></td><td><code>false</code></td>
+          <td>When <code>true</code> (the default), Prometheus only discovers ServiceMonitors that share the Helm release label. Setting <code>false</code> combined with empty selectors makes it watch <em>all</em> ServiceMonitors in <em>all</em> namespaces.</td>
+        </tr>
+        <tr>
+          <td><code>serviceMonitorSelector: {}</code></td><td>match all</td>
+          <td>Empty label selector = no filter = every ServiceMonitor is discovered, including the ones in <code>monitoring</code> that point at <code>plots-system</code>.</td>
+        </tr>
+        <tr>
+          <td><code>serviceMonitorNamespaceSelector: {}</code></td><td>all namespaces</td>
+          <td>Allows Prometheus Operator to read ServiceMonitor CRDs from namespaces other than its own.</td>
+        </tr>
+        <tr>
+          <td><code>storage: 50Gi</code></td><td>PVC</td>
+          <td>Prometheus data survives pod restarts. Adjust based on cardinality and retention period.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ── Grafana ── -->
+  <h3 id="helm-grafana">Grafana</h3>
+  <p>The <code>grafana</code> block configures the Grafana Deployment, its persistent volume, and the dashboard sidecar that auto-imports community dashboards on startup.</p>
+
+  <div class="code-wrap">
+    <pre>grafana:
+  enabled: true
+  adminPassword: "changeme-in-prod"  <span style="color:#5A7090"># ← CHANGE BEFORE PRODUCTION</span>
+  persistence:
+    enabled: true
+    size: 10Gi  <span style="color:#5A7090"># stores dashboards, users, datasource configs</span>
+  resources:
+    requests:
+      memory: 128Mi
+      cpu: 100m
+    limits:
+      memory: 512Mi
+      cpu: 500m</pre>
+    <button class="copy-btn">Copy</button>
+  </div>
+
+  <h4>Dashboard providers</h4>
+  <p>The <code>dashboardProviders</code> block registers a file-based provider. Grafana's sidecar container watches a ConfigMap for dashboard JSON files and writes them to the <code>path</code> directory at runtime. The <code>plots</code> folder name becomes the folder in the Grafana UI.</p>
+
+  <div class="code-wrap">
+    <pre>  dashboardProviders:
+    dashboardproviders.yaml:
+      apiVersion: 1
+      providers:
+        - name: plots         <span style="color:#5A7090"># logical provider name — used as a key below</span>
+          orgId: 1
+          folder: Plots       <span style="color:#5A7090"># folder name shown in the Grafana sidebar</span>
+          type: file
+          disableDeletion: false
+          editable: true
+          options:
+            path: /var/lib/grafana/dashboards/plots  <span style="color:#5A7090"># where JSON is written</span></pre>
+    <button class="copy-btn">Copy</button>
+  </div>
+
+  <h4>Dashboard imports</h4>
+  <p>Each entry under <code>dashboards.plots</code> is a key (dashboard slug) mapped to a <code>gnetId</code>. On startup the Grafana sidecar fetches the JSON from grafana.com and registers it with the <code>plots</code> provider. The <code>datasource</code> field wires each dashboard to the Prometheus data source that the chart creates automatically.</p>
+
+  <div class="code-wrap">
+    <pre>  dashboards:
+    plots:                              <span style="color:#5A7090"># must match the provider name above</span>
+      fastapi-observability:
+        gnetId: 16110                   <span style="color:#5A7090"># Request rate, latency, errors per service</span>
+        revision: 1
+        datasource: Prometheus
+      kubernetes-pods:
+        gnetId: 15761                   <span style="color:#5A7090"># CPU / memory / restarts per pod</span>
+        revision: 1
+        datasource: Prometheus
+      node-exporter-full:
+        gnetId: 1860                    <span style="color:#5A7090"># Host CPU, memory, disk, network</span>
+        revision: 1
+        datasource: Prometheus
+      kafka-exporter:
+        gnetId: 7589                    <span style="color:#5A7090"># Topic lag, consumer offsets</span>
+        revision: 1
+        datasource: Prometheus
+      postgresql:
+        gnetId: 9628                    <span style="color:#5A7090"># Connections, transactions, cache hits</span>
+        revision: 1
+        datasource: Prometheus
+      redis-exporter:
+        gnetId: 11835                   <span style="color:#5A7090"># Memory, clients, evictions</span>
+        revision: 1
+        datasource: Prometheus</pre>
+    <button class="copy-btn">Copy</button>
+  </div>
+
+  <div class="callout warn">
+    <strong>Internet access required at startup.</strong> The Grafana sidecar calls grafana.com to download dashboard JSON. If your cluster has no outbound internet access, download the JSON files manually and supply them as ConfigMaps instead.
+  </div>
+
+  <!-- ── Alertmanager ── -->
+  <h3 id="helm-alertmgr">Alertmanager</h3>
+  <p>The <code>alertmanager</code> block configures storage and the routing tree that determines what happens when Prometheus fires an alert.</p>
+
+  <div class="code-wrap">
+    <pre>alertmanager:
+  enabled: true
+  alertmanagerSpec:
+    storage:
+      volumeClaimTemplate:
+        spec:
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 5Gi   <span style="color:#5A7090"># persists silences and notification history</span>
+
+  config:
+    global:
+      resolve_timeout: 5m   <span style="color:#5A7090"># mark alert resolved if not re-fired within 5 min</span>
+
+    route:
+      group_by: ["alertname", "namespace", "job"]  <span style="color:#5A7090"># deduplicate similar alerts into one notification</span>
+      group_wait:      30s   <span style="color:#5A7090"># wait 30 s before sending first notification (batches rapid-fire alerts)</span>
+      group_interval:   5m   <span style="color:#5A7090"># wait 5 min before re-notifying about the same group</span>
+      repeat_interval: 12h   <span style="color:#5A7090"># re-notify every 12 h while alert stays active</span>
+      receiver: "null"       <span style="color:#5A7090"># default: drop (no notification) — add Slack/email below</span>
+      routes:
+        - matchers:
+            - alertname =~ "InfoInhibitor|Watchdog"  <span style="color:#5A7090"># silence built-in heartbeat alerts</span>
+          receiver: "null"
+
+    receivers:
+      - name: "null"         <span style="color:#5A7090"># the null receiver discards all notifications</span>
+
+    inhibit_rules:
+      <span style="color:#5A7090"># If a Critical alert fires, suppress Warning/Info for the same pod.
+      # Prevents a flood of warning noise when a service is fully down.</span>
+      - source_matchers:
+          - severity = critical
+        target_matchers:
+          - severity =~ warning|info
+        equal: [alertname, namespace, pod]</pre>
+    <button class="copy-btn">Copy</button>
+  </div>
+
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Routing key</th><th>Setting</th><th>Effect</th></tr></thead>
+      <tbody>
+        <tr><td><code>group_by</code></td><td><code>[alertname, namespace, job]</code></td><td>Multiple pods firing the same alert are grouped into one notification instead of one per pod.</td></tr>
+        <tr><td><code>group_wait</code></td><td><code>30s</code></td><td>Buffers the first 30 seconds so rapid successive firings become one message.</td></tr>
+        <tr><td><code>group_interval</code></td><td><code>5m</code></td><td>Once a group is notified, Alertmanager waits 5 min before sending another update for that same group.</td></tr>
+        <tr><td><code>repeat_interval</code></td><td><code>12h</code></td><td>If the alert is still firing 12 hours later, send another reminder.</td></tr>
+        <tr><td><code>inhibit_rules</code></td><td>critical → suppresses warning</td><td>Avoids alert storms: when a pod is completely down (critical), its per-endpoint warning alerts are suppressed.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ── Alert rules PromQL ── -->
+  <h3 id="helm-rules">Custom alert rules — PromQL explained</h3>
+  <p>All four rules are grouped under <code>additionalPrometheusRulesMap.plots-alerts.groups[0]</code> and evaluated against the <code>plots-system</code> namespace. Prometheus evaluates them every <code>evaluationInterval</code> (15 s).</p>
+
+  <div class="card" style="margin-bottom:1.25rem">
+    <h4 style="color:var(--danger);margin-bottom:.4rem">ServiceDown &nbsp;<span class="badge badge-red">Critical · for: 1m</span></h4>
+    <div class="code-wrap" style="margin-bottom:.5rem">
+      <pre>up{namespace="plots-system"} == 0</pre>
+      <button class="copy-btn">Copy</button>
+    </div>
+    <p style="font-size:.85rem;margin-bottom:0">The <code>up</code> metric is set to <code>1</code> by Prometheus after each successful scrape and <code>0</code> on failure. This rule fires if <em>any</em> scrape target in <code>plots-system</code> has been unreachable for a full minute — catching both crashed pods and misconfigured ServiceMonitors.</p>
+  </div>
+
+  <div class="card" style="margin-bottom:1.25rem">
+    <h4 style="color:var(--warn);margin-bottom:.4rem">HighErrorRate &nbsp;<span class="badge badge-amber">Warning · for: 5m</span></h4>
+    <div class="code-wrap" style="margin-bottom:.5rem">
+      <pre>sum(rate(http_requests_total{namespace="plots-system", status=~"5.."}[5m])) by (job)
+/
+sum(rate(http_requests_total{namespace="plots-system"}[5m])) by (job)
+> 0.05</pre>
+      <button class="copy-btn">Copy</button>
+    </div>
+    <p style="font-size:.85rem;margin-bottom:.4rem"><strong>Numerator:</strong> per-second rate of 5xx responses over the last 5-minute window, summed per service (<code>job</code> label).</p>
+    <p style="font-size:.85rem;margin-bottom:.4rem"><strong>Denominator:</strong> per-second rate of <em>all</em> requests, same window.</p>
+    <p style="font-size:.85rem;margin-bottom:0"><strong>Threshold:</strong> <code>> 0.05</code> = more than 5% of requests are failing. Uses <code>rate()</code> (not <code>irate()</code>) for a smoother signal that ignores momentary spikes.</p>
+  </div>
+
+  <div class="card" style="margin-bottom:1.25rem">
+    <h4 style="color:var(--warn);margin-bottom:.4rem">HighP99Latency &nbsp;<span class="badge badge-amber">Warning · for: 5m</span></h4>
+    <div class="code-wrap" style="margin-bottom:.5rem">
+      <pre>histogram_quantile(
+  0.99,
+  sum(rate(http_request_duration_seconds_bucket{namespace="plots-system"}[5m])) by (job, le)
+) > 2</pre>
+      <button class="copy-btn">Copy</button>
+    </div>
+    <p style="font-size:.85rem;margin-bottom:.4rem"><code>http_request_duration_seconds_bucket</code> is the histogram emitted by <code>prometheus-fastapi-instrumentator</code>. Each bucket has an <code>le</code> (less-than-or-equal) upper bound label.</p>
+    <p style="font-size:.85rem;margin-bottom:.4rem"><code>rate(...)[5m]</code> turns the cumulative bucket counters into a per-second rate, then <code>histogram_quantile(0.99, ...)</code> estimates the 99th percentile duration from those rates.</p>
+    <p style="font-size:.85rem;margin-bottom:0">Fires when the estimated P99 exceeds <strong>2 seconds</strong> for 5 consecutive minutes. Grouped by <code>job</code> so you know which service is slow.</p>
+  </div>
+
+  <div class="card" style="margin-bottom:1.5rem">
+    <h4 style="color:var(--warn);margin-bottom:.4rem">KafkaConsumerLag &nbsp;<span class="badge badge-amber">Warning · for: 5m</span></h4>
+    <div class="code-wrap" style="margin-bottom:.5rem">
+      <pre>kafka_consumergroup_lag_sum > 10000</pre>
+      <button class="copy-btn">Copy</button>
+    </div>
+    <p style="font-size:.85rem;margin-bottom:.4rem"><code>kafka_consumergroup_lag_sum</code> is emitted by <code>kafka-exporter</code>. It represents the total number of messages in a Kafka topic that have been produced but not yet consumed by a consumer group.</p>
+    <p style="font-size:.85rem;margin-bottom:0">A lag above <strong>10,000 messages</strong> sustained for 5 minutes indicates a consumer is falling behind — either overwhelmed, crashed, or blocked. The alert labels carry <code>consumergroup</code> and <code>topic</code> so you can identify which service is lagging.</p>
+  </div>
+
+  <h4>Component toggles</h4>
+  <p>The remaining top-level keys enable or disable optional sub-charts bundled with <code>kube-prometheus-stack</code>:</p>
+
+  <div class="code-wrap">
+    <pre>nodeExporter:
+  enabled: true     <span style="color:#5A7090"># DaemonSet on every node — CPU, memory, disk I/O, network</span>
+
+kubeStateMetrics:
+  enabled: true     <span style="color:#5A7090"># Deployment — K8s object states (pod phase, HPA, PVC bound/unbound)</span>
+
+kubelet:
+  enabled: true     <span style="color:#5A7090"># Scrapes kubelet /metrics/cadvisor for container-level resource usage</span>
+
+kubeApiServer:
+  enabled: true     <span style="color:#5A7090"># Scrapes the API server — request rate, etcd latency, admission webhook duration</span></pre>
+    <button class="copy-btn">Copy</button>
+  </div>
+
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Component</th><th>Workload type</th><th>Metrics prefix</th></tr></thead>
+      <tbody>
+        <tr><td>nodeExporter</td><td>DaemonSet in <code>monitoring</code></td><td><code>node_*</code></td></tr>
+        <tr><td>kubeStateMetrics</td><td>Deployment in <code>monitoring</code></td><td><code>kube_*</code></td></tr>
+        <tr><td>kubelet</td><td>ServiceMonitor only (kubelet is part of the OS)</td><td><code>container_*</code>, <code>kubelet_*</code></td></tr>
+        <tr><td>kubeApiServer</td><td>ServiceMonitor only (API server is part of the control plane)</td><td><code>apiserver_*</code></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Applying changes to a running release</h3>
+  <p>After editing <code>helm-values.yaml</code>, re-run the same <code>helm upgrade</code> command — no need to uninstall first. Helm diffs the rendered manifests and applies only what changed.</p>
+
+  <div class="code-wrap">
+    <pre>helm upgrade monitoring prometheus-community/kube-prometheus-stack \
+  --namespace monitoring \
+  --values k8s/monitoring/helm-values.yaml</pre>
+    <button class="copy-btn">Copy</button>
+  </div>
+
+  <div class="callout">
+    Changes to <code>additionalPrometheusRulesMap</code> or <code>dashboards</code> take effect within one scrape interval (≤ 15 s) without restarting Prometheus. Changes to <code>prometheusSpec.resources</code> or <code>grafana.adminPassword</code> require the respective pod to restart — Helm handles this automatically via a rolling update.
+  </div>
+</section>
+
+<!-- ── ACCESSING UIs ──────────────────────────────────── -->
+<section class="doc-section" id="access">
+  <h2>Accessing the UIs</h2>
+  <p>Use <code>kubectl port-forward</code> to expose each UI locally. Run each command in a separate terminal and keep it open while browsing.</p>
+
+  <div class="access-grid">
+    <div class="access-card">
+      <div class="ac-name">Grafana <span class="badge badge-green">Dashboards</span></div>
+      <div class="ac-url">http://localhost:3000</div>
+      <div class="ac-cred">Username: <code>admin</code> &nbsp;·&nbsp; Password: <code>changeme-in-prod</code></div>
+      <div class="code-wrap">
+        <pre>kubectl port-forward \
+  svc/monitoring-grafana \
+  3000:80 -n monitoring</pre>
+        <button class="copy-btn">Copy</button>
+      </div>
+    </div>
+    <div class="access-card">
+      <div class="ac-name">Prometheus <span class="badge badge-blue">Metrics</span></div>
+      <div class="ac-url">http://localhost:9090</div>
+      <div class="ac-cred">No login required</div>
+      <div class="code-wrap">
+        <pre>kubectl port-forward \
+  svc/monitoring-kube-prometheus-prometheus \
+  9090:9090 -n monitoring</pre>
+        <button class="copy-btn">Copy</button>
+      </div>
+    </div>
+    <div class="access-card">
+      <div class="ac-name">Alertmanager <span class="badge badge-amber">Alerts</span></div>
+      <div class="ac-url">http://localhost:9093</div>
+      <div class="ac-cred">No login required</div>
+      <div class="code-wrap">
+        <pre>kubectl port-forward \
+  svc/monitoring-kube-prometheus-alertmanager \
+  9093:9093 -n monitoring</pre>
+        <button class="copy-btn">Copy</button>
+      </div>
+    </div>
+  </div>
+
+  <h3>Retrieve the Grafana password from the cluster</h3>
+  <div class="code-wrap">
+    <pre>kubectl --namespace monitoring get secret monitoring-grafana \
+  -o jsonpath="{.data.admin-password}" | base64 -d && echo</pre>
+    <button class="copy-btn">Copy</button>
+  </div>
+
+  <h3>Verify Prometheus scrape targets</h3>
+  <p>Open Prometheus → <strong>Status → Targets</strong>. All 9 targets (6 app services + 3 exporters) should show <span class="badge badge-green">UP</span>. From the CLI:</p>
+  <div class="code-wrap">
+    <pre>curl -s 'http://localhost:9090/api/v1/targets' \
+  | jq '.data.activeTargets[] | {job: .labels.job, health: .health}'</pre>
+    <button class="copy-btn">Copy</button>
+  </div>
+</section>
+
+<!-- ── DASHBOARDS ─────────────────────────────────────── -->
+<section class="doc-section" id="dashboards">
+  <h2>Grafana dashboards</h2>
+  <p>Six dashboards are imported automatically from grafana.com on first Grafana startup. Find them under <strong>Dashboards → Plots</strong> folder.</p>
+
+  <div class="dash-grid">
+    <div class="dash-card">
+      <div class="dash-id">grafana.com / 16110</div>
+      <div class="dash-name">FastAPI Observability</div>
+      <div class="dash-desc">Request rate, P50/P95/P99 latency, error rate, and active requests — one row per service.</div>
+    </div>
+    <div class="dash-card">
+      <div class="dash-id">grafana.com / 15761</div>
+      <div class="dash-name">Kubernetes Pods</div>
+      <div class="dash-desc">CPU usage, memory usage, restart counts, and network I/O broken down by pod.</div>
+    </div>
+    <div class="dash-card">
+      <div class="dash-id">grafana.com / 1860</div>
+      <div class="dash-name">Node Exporter Full</div>
+      <div class="dash-desc">Host-level CPU, load average, memory, disk I/O, and network per cluster node.</div>
+    </div>
+    <div class="dash-card">
+      <div class="dash-id">grafana.com / 7589</div>
+      <div class="dash-name">Kafka Exporter</div>
+      <div class="dash-desc">Topic message rate, consumer group lag, partition leaders, and broker offsets.</div>
+    </div>
+    <div class="dash-card">
+      <div class="dash-id">grafana.com / 9628</div>
+      <div class="dash-name">PostgreSQL</div>
+      <div class="dash-desc">Active connections, transaction rate, cache hit ratio, table sizes, and deadlocks.</div>
+    </div>
+    <div class="dash-card">
+      <div class="dash-id">grafana.com / 11835</div>
+      <div class="dash-name">Redis Exporter</div>
+      <div class="dash-desc">Memory usage, connected clients, commands per second, keyspace hits and evictions.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ── ALERT RULES ────────────────────────────────────── -->
+<section class="doc-section" id="alerts">
+  <h2>Alert rules</h2>
+  <p>Four custom rules are defined in <code>helm-values.yaml</code> under <code>additionalPrometheusRulesMap</code> and scoped to the <code>plots-system</code> namespace. Alerts are visible in Alertmanager UI but not routed anywhere by default — add a Slack or email receiver in <code>helm-values.yaml</code> to enable notifications.</p>
+
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>Alert</th><th>Condition</th><th>For</th><th>Severity</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>ServiceDown</code></td>
+          <td>Any scrape target reports <code>up == 0</code></td>
+          <td>1 min</td>
+          <td><span class="badge badge-red">Critical</span></td>
+        </tr>
+        <tr>
+          <td><code>HighErrorRate</code></td>
+          <td>5xx responses &gt; 5% of total requests</td>
+          <td>5 min</td>
+          <td><span class="badge badge-amber">Warning</span></td>
+        </tr>
+        <tr>
+          <td><code>HighP99Latency</code></td>
+          <td>P99 response time &gt; 2 seconds</td>
+          <td>5 min</td>
+          <td><span class="badge badge-amber">Warning</span></td>
+        </tr>
+        <tr>
+          <td><code>KafkaConsumerLag</code></td>
+          <td>Consumer group lag &gt; 10,000 messages</td>
+          <td>5 min</td>
+          <td><span class="badge badge-amber">Warning</span></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Add a Slack receiver</h3>
+  <p>Edit <code>k8s/monitoring/helm-values.yaml</code> — replace the <code>null</code> receiver with:</p>
+  <div class="code-wrap">
+    <pre>alertmanager:
+  config:
+    receivers:
+      - name: slack
+        slack_configs:
+          - api_url: 'https://hooks.slack.com/services/YOUR/WEBHOOK/URL'
+            channel: '#alerts'
+            title: '{{ .CommonLabels.alertname }}'
+            text: '{{ range .Alerts }}{{ .Annotations.description }}{{ end }}'
+    route:
+      receiver: slack</pre>
+    <button class="copy-btn">Copy</button>
+  </div>
+  <p>Then apply: <code>helm upgrade monitoring prometheus-community/kube-prometheus-stack --namespace monitoring --values k8s/monitoring/helm-values.yaml</code></p>
+</section>
+
+<!-- ── SERVICEMONITORS ────────────────────────────────── -->
+<section class="doc-section" id="servicemonitors">
+  <h2>ServiceMonitors</h2>
+  <p>ServiceMonitor is a Prometheus Operator CRD that tells Prometheus where to scrape. Each monitor lives in the <code>monitoring</code> namespace and targets services in <code>plots-system</code> by matching the <code>app: &lt;name&gt;</code> label on each Kubernetes Service resource.</p>
+
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>ServiceMonitor</th><th>Selects service label</th><th>Port</th><th>Interval</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><code>api-gateway</code></td><td><code>app: api-gateway</code></td><td><code>http</code> → 80</td><td>15s</td></tr>
+        <tr><td><code>auth-service</code></td><td><code>app: auth-service</code></td><td><code>http</code> → 8010</td><td>15s</td></tr>
+        <tr><td><code>chat-service</code></td><td><code>app: chat-service</code></td><td><code>http</code> → 8001</td><td>15s</td></tr>
+        <tr><td><code>plot-service</code></td><td><code>app: plot-service</code></td><td><code>http</code> → 8003</td><td>15s</td></tr>
+        <tr><td><code>payment-service</code></td><td><code>app: payment-service</code></td><td><code>http</code> → 8011</td><td>15s</td></tr>
+        <tr><td><code>notification-service</code></td><td><code>app: notification-service</code></td><td><code>http</code> → 8012</td><td>15s</td></tr>
+        <tr><td><code>kafka-exporter</code></td><td><code>app: kafka-exporter</code></td><td><code>metrics</code> → 9308</td><td>30s</td></tr>
+        <tr><td><code>postgres-exporter</code></td><td><code>app: postgres-exporter</code></td><td><code>metrics</code> → 9187</td><td>30s</td></tr>
+        <tr><td><code>redis-exporter</code></td><td><code>app: redis-exporter</code></td><td><code>metrics</code> → 9121</td><td>30s</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="callout">
+    Prometheus Operator is configured with <code>serviceMonitorSelector: {}</code> and <code>serviceMonitorNamespaceSelector: {}</code> in <code>helm-values.yaml</code>, which means it watches ServiceMonitors in <strong>all namespaces</strong> — no label matching required.
+  </div>
+
+  <h3>How /metrics is exposed on each service</h3>
+  <p>Two lines were added to each service's <code>main.py</code>:</p>
+  <div class="code-wrap">
+    <pre><span style="color:#5A7090"># import at top</span>
+from prometheus_fastapi_instrumentator import Instrumentator
+
+<span style="color:#5A7090"># after register_exception_handlers(app)</span>
+Instrumentator(excluded_handlers=["/health.*", "/metrics"]).instrument(app).expose(app)</pre>
+    <button class="copy-btn">Copy</button>
+  </div>
+  <p>For <code>chat-service</code> and <code>plot-service</code>, <code>/metrics</code> was added to the <code>InternalAuthMiddleware._SKIP</code> frozenset so Prometheus can scrape without the <code>x-internal-secret</code> header.</p>
+</section>
+
+<!-- ── EXPORTERS ──────────────────────────────────────── -->
+<section class="doc-section" id="exporters">
+  <h2>Infrastructure exporters</h2>
+  <p>Three exporters are deployed as Deployments inside <code>plots-system</code> so they share the same namespace as the infrastructure they monitor and can reference <code>plots-secrets</code> for credentials.</p>
+
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>Exporter</th><th>Image</th><th>Target</th><th>Credentials source</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>kafka-exporter</td>
+          <td><code>danielqsj/kafka-exporter:latest</code></td>
+          <td><code>kafka:9092</code></td>
+          <td>None required</td>
+        </tr>
+        <tr>
+          <td>postgres-exporter</td>
+          <td><code>prometheuscommunity/postgres-exporter</code></td>
+          <td><code>postgres:5432/mvp_db</code></td>
+          <td><code>plots-secrets</code> → <code>POSTGRES_USER</code>, <code>POSTGRES_PASSWORD</code></td>
+        </tr>
+        <tr>
+          <td>redis-exporter</td>
+          <td><code>oliver006/redis_exporter:latest</code></td>
+          <td><code>redis:6379</code></td>
+          <td><code>plots-secrets</code> → <code>REDIS_PASSWORD</code></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ── TROUBLESHOOTING ────────────────────────────────── -->
+<section class="doc-section" id="troubleshooting">
+  <h2>Troubleshooting</h2>
+
+  <h3>Kubernetes cluster unreachable</h3>
+  <p>Docker Desktop Kubernetes is not enabled or hasn't finished starting. Open Docker Desktop → Settings → Kubernetes → Enable Kubernetes → Apply &amp; Restart. Wait ~2 minutes, then verify with <code>kubectl cluster-info</code>.</p>
+
+  <h3>namespace "plots-system" not found</h3>
+  <p>The application namespace must exist before the exporters are applied. Run <code>kubectl apply -f k8s/namespace.yaml</code> first, then re-apply exporters and ServiceMonitors.</p>
+
+  <h3>node-exporter: CrashLoopBackOff on Docker Desktop Windows</h3>
+  <p>node-exporter tries to bind-mount <code>/proc</code> and <code>/sys</code> from the host OS. Docker Desktop on Windows runs Kubernetes inside a Linux VM where those paths are not exposed in the way node-exporter expects, causing it to crash immediately.</p>
+  <p><strong>Fix:</strong> disable the host root filesystem mount in <code>helm-values.yaml</code>:</p>
+  <div class="code-wrap">
+    <pre>prometheus-node-exporter:
+  hostRootFsMount:
+    enabled: false</pre>
+    <button class="copy-btn">Copy</button>
+  </div>
+  <p>Then apply: <code>helm upgrade monitoring prometheus-community/kube-prometheus-stack --namespace monitoring --values k8s/monitoring/helm-values.yaml</code></p>
+  <p>This setting is already included in the current <code>helm-values.yaml</code>. If you installed before this fix was added, run the upgrade command above.</p>
+
+  <h3>postgres-exporter / redis-exporter: CreateContainerConfigError</h3>
+  <p>Both exporters reference <code>plots-secrets</code> as a <code>secretKeyRef</code> source for credentials. If this Secret does not exist in <code>plots-system</code>, Kubernetes cannot inject the environment variables and refuses to start the container.</p>
+  <div class="code-wrap">
+    <pre>kubectl describe pod -n plots-system -l app=postgres-exporter
+<span style="color:#5A7090"># Events: ... Error: secret "plots-secrets" not found</span></pre>
+    <button class="copy-btn">Copy</button>
+  </div>
+  <p><strong>This is expected</strong> when the app services haven't been deployed yet. The pods will automatically recover (no manual restart needed) as soon as <code>plots-secrets</code> is created by the app deployment process.</p>
+  <p>To verify once secrets exist: <code>kubectl get secret plots-secrets -n plots-system</code></p>
+
+  <h3>kafka-exporter: Error / CrashLoopBackOff</h3>
+  <p>kafka-exporter connects to <code>kafka:9092</code> on startup. If Kafka is not yet deployed to <code>plots-system</code>, the connection is refused and the container exits with an error.</p>
+  <p><strong>This is expected</strong> before the app services are deployed. Kubernetes will keep restarting the pod (backoff increases from 10 s up to 5 min). Once Kafka is running at <code>kafka:9092</code>, the next restart attempt will succeed automatically.</p>
+
+  <h3>install.sh: namespace "plots-system" not found on exporters step</h3>
+  <p>If you see this error even though <code>install.sh</code> has the namespace creation step, it means the script ran with an older cached version, or the <code>kubectl apply -f k8s/namespace.yaml</code> call failed silently on first run. Fix by running the steps manually:</p>
+  <div class="code-wrap">
+    <pre>kubectl apply -f k8s/namespace.yaml
+kubectl apply -f k8s/monitoring/exporters.yaml
+kubectl apply -f k8s/monitoring/servicemonitors.yaml</pre>
+    <button class="copy-btn">Copy</button>
+  </div>
+
+  <h3>Kubernetes cluster unreachable on first install.sh run</h3>
+  <p>Docker Desktop Kubernetes takes ~2 minutes to become fully ready after enabling it. The first <code>helm upgrade --install</code> call may fail with <code>the server could not find the requested resource</code>. Wait until <code>kubectl cluster-info</code> shows the control plane URL, then re-run <code>bash k8s/monitoring/install.sh</code> — Helm is idempotent and safe to re-run.</p>
+  <div class="code-wrap">
+    <pre>kubectl cluster-info
+<span style="color:#5A7090"># Kubernetes control plane is running at https://kubernetes.docker.internal:6443</span></pre>
+    <button class="copy-btn">Copy</button>
+  </div>
+
+  <h3>Prometheus targets show state DOWN</h3>
+  <p>App services haven't been deployed to <code>plots-system</code> yet, or their pods are not running. Verify with <code>kubectl get pods -n plots-system</code>. Also confirm each Kubernetes Service has the label <code>app: &lt;name&gt;</code> — all six service YAML files in <code>k8s/services/</code> were updated with this label.</p>
+
+  <h3>Grafana shows "No data"</h3>
+  <p>Go to Grafana → Connections → Data Sources → Prometheus → click <strong>Test</strong>. If the test passes, wait 1–2 scrape intervals (15–30 seconds) and refresh the dashboard time range.</p>
+
+  <h3>chat-service or plot-service /metrics returns 403</h3>
+  <p>Both services run <code>InternalAuthMiddleware</code> which blocks requests without <code>x-internal-secret</code>. The <code>/metrics</code> path must be in the <code>_SKIP</code> frozenset in <code>app/common/internal_auth.py</code> for both services. Rebuild the Docker image if the change isn't reflected in the running container.</p>
+
+  <h3>helm: command not found in Git Bash</h3>
+  <p>Helm was installed to <code>%USERPROFILE%\bin</code> but Git Bash hasn't reloaded PATH. Close and reopen Git Bash, then verify with <code>helm version</code>.</p>
+  <p>The <code>curl | bash</code> installer may also fail on Git Bash on Windows because it requires <code>sudo</code>. This is safe to ignore — if <code>helm version</code> works, Helm is correctly installed.</p>
+</section>
+
+<!-- ── FILE REFERENCE ─────────────────────────────────── -->
+<section class="doc-section" id="files">
+  <h2>File reference</h2>
+
+  <h3>New files created</h3>
+  <div class="file-tree">
+    <span class="ft-dir">k8s/monitoring/</span>
+    <span class="ft-i1"><span class="ft-file">namespace.yaml</span><span class="ft-desc"> — Creates the <code>monitoring</code> namespace</span></span>
+    <span class="ft-i1"><span class="ft-file">helm-values.yaml</span><span class="ft-desc"> — kube-prometheus-stack config, Grafana dashboards, alert rules</span></span>
+    <span class="ft-i1"><span class="ft-file">servicemonitors.yaml</span><span class="ft-desc"> — ServiceMonitor CRDs for all 6 app services + 3 exporters</span></span>
+    <span class="ft-i1"><span class="ft-file">exporters.yaml</span><span class="ft-desc"> — Kafka, PostgreSQL, Redis exporter Deployments and Services</span></span>
+    <span class="ft-i1"><span class="ft-file">install.sh</span><span class="ft-desc"> — One-shot install script</span></span>
+  </div>
+
+  <h3>Modified files</h3>
+  <div class="file-tree">
+    <span class="ft-dir">services/&lt;each-service&gt;/pyproject.toml</span>
+    <span class="ft-i1"><span class="ft-desc">Added <code>"prometheus-fastapi-instrumentator&gt;=7.0"</code> to dependencies</span></span>
+
+    <span class="ft-dir" style="margin-top:.5rem">services/&lt;each-service&gt;/main.py</span>
+    <span class="ft-i1"><span class="ft-desc">Added <code>Instrumentator(...).instrument(app).expose(app)</code></span></span>
+
+    <span class="ft-dir" style="margin-top:.5rem">services/chat-service/app/common/internal_auth.py</span>
+    <span class="ft-i1"><span class="ft-desc">Added <code>"/metrics"</code> to <code>_SKIP</code> frozenset</span></span>
+
+    <span class="ft-dir" style="margin-top:.5rem">services/plot-service/app/common/internal_auth.py</span>
+    <span class="ft-i1"><span class="ft-desc">Added <code>"/metrics"</code> to <code>_SKIP</code> frozenset</span></span>
+
+    <span class="ft-dir" style="margin-top:.5rem">k8s/services/*.yaml  (all 6 service manifests)</span>
+    <span class="ft-i1"><span class="ft-desc">Added <code>metadata.labels: app: &lt;name&gt;</code> and <code>ports[].name: http</code> to each Service resource</span></span>
+  </div>
+</section>
+
+<!-- ── SUSPEND ───────────────────────────────────────── -->
+<section class="doc-section" id="suspend">
+  <h2>Suspend without deleting</h2>
+  <p>Scale every component to zero replicas. Nothing is deleted — all Deployments, StatefulSets, PVCs, ConfigMaps, Secrets, and RBAC rules remain intact. Scaling back up restores the full stack with all historical data.</p>
+
+  <div class="callout ok">
+    <strong>Fully reversible.</strong> PVCs are untouched so Prometheus metrics and Grafana state survive the suspension and are immediately available when you resume.
+  </div>
+
+  <h3>Suspend everything</h3>
+
+  <div class="code-wrap">
+    <pre><span style="color:#5A7090"># ── Stop monitoring namespace: Grafana + kube-state-metrics ──────────────────</span>
+kubectl scale deployment --all --replicas=0 -n monitoring
+
+<span style="color:#5A7090"># ── Stop Prometheus and Alertmanager StatefulSets ────────────────────────────</span>
+kubectl scale statefulset --all --replicas=0 -n monitoring
+
+<span style="color:#5A7090"># ── Stop infrastructure exporters in plots-system ────────────────────────────</span>
+kubectl scale deployment kafka-exporter postgres-exporter redis-exporter \
+  --replicas=0 -n plots-system</pre>
+    <button class="copy-btn">Copy</button>
+  </div>
+
+  <h4>Stop node-exporter (DaemonSet)</h4>
+  <p>DaemonSets cannot be scaled to zero directly. Instead patch in a <code>nodeSelector</code> that matches no node — this causes Kubernetes to evict all DaemonSet pods without deleting the DaemonSet itself.</p>
+  <div class="code-wrap">
+    <pre>kubectl patch daemonset monitoring-prometheus-node-exporter \
+  -n monitoring \
+  -p '{"spec":{"template":{"spec":{"nodeSelector":{"suspend":"true"}}}}}'</pre>
+    <button class="copy-btn">Copy</button>
+  </div>
+
+  <h3>Verify all pods stopped</h3>
+  <div class="code-wrap">
+    <pre>kubectl get pods -n monitoring
+<span style="color:#5A7090"># No resources found in monitoring namespace.  ← expected</span>
+
+kubectl get pods -n plots-system | grep exporter
+<span style="color:#5A7090"># No output  ← expected</span></pre>
+    <button class="copy-btn">Copy</button>
+  </div>
+
+  <h3>Resume — scale back up</h3>
+
+  <div class="code-wrap">
+    <pre><span style="color:#5A7090"># ── Restart monitoring namespace ──────────────────────────────────────────────</span>
+kubectl scale deployment --all --replicas=1 -n monitoring
+kubectl scale statefulset --all --replicas=1 -n monitoring
+
+<span style="color:#5A7090"># ── Restart exporters ─────────────────────────────────────────────────────────</span>
+kubectl scale deployment kafka-exporter postgres-exporter redis-exporter \
+  --replicas=1 -n plots-system
+
+<span style="color:#5A7090"># ── Restore node-exporter DaemonSet ──────────────────────────────────────────</span>
+kubectl patch daemonset monitoring-prometheus-node-exporter \
+  -n monitoring \
+  --type=json \
+  -p='[{"op":"remove","path":"/spec/template/spec/nodeSelector"}]'</pre>
+    <button class="copy-btn">Copy</button>
+  </div>
+
+  <div class="callout">
+    After resuming, Prometheus re-attaches to its PVC and replays the existing WAL (write-ahead log). All metrics stored before the suspension are visible in Grafana immediately. There is a gap in the timeline for the period the stack was suspended — this is expected.
+  </div>
+
+  <h3>Suspend vs. teardown — quick reference</h3>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>Action</th><th>Deletes pods</th><th>Deletes PVCs</th><th>Reversible</th><th>Data gap</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Stop port-forwards</td>
+          <td><span class="badge badge-green">No</span></td>
+          <td><span class="badge badge-green">No</span></td>
+          <td><span class="badge badge-green">Yes</span></td>
+          <td><span class="badge badge-green">No</span></td>
+        </tr>
+        <tr>
+          <td><strong>Suspend (scale to 0)</strong></td>
+          <td><span class="badge badge-amber">Pods removed</span></td>
+          <td><span class="badge badge-green">No</span></td>
+          <td><span class="badge badge-green">Yes</span></td>
+          <td><span class="badge badge-amber">Gap while suspended</span></td>
+        </tr>
+        <tr>
+          <td>Soft teardown (helm uninstall)</td>
+          <td><span class="badge badge-red">Yes</span></td>
+          <td><span class="badge badge-green">No</span></td>
+          <td><span class="badge badge-green">Yes</span></td>
+          <td><span class="badge badge-amber">Gap while removed</span></td>
+        </tr>
+        <tr>
+          <td>Full teardown</td>
+          <td><span class="badge badge-red">Yes</span></td>
+          <td><span class="badge badge-red">Yes</span></td>
+          <td><span class="badge badge-red">No</span></td>
+          <td><span class="badge badge-red">All data lost</span></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ── RESTART FROM DOCKER ───────────────────────────── -->
+<section class="doc-section" id="restart">
+  <h2>Restart from Docker</h2>
+  <p>Use this when you stopped everything with <code>docker stop $(docker ps -q)</code>, restarted your machine, or Docker Desktop restarted on its own. Follow the steps in order — Kubernetes must be fully ready before scaling the monitoring stack.</p>
+
+  <div class="callout ok">
+    <strong>Data is safe.</strong> Docker stop does not delete volumes or Kubernetes PVCs. All Prometheus metrics and Grafana state from before the stop are still there.
+  </div>
+
+  <div class="steps">
+
+    <div class="step">
+      <div class="step-num">1</div>
+      <div class="step-body">
+        <div class="step-title">Start Docker Desktop</div>
+        <div class="step-desc">Open Docker Desktop from the Start menu or system tray. Wait until both status indicators in the bottom-left turn green — <strong>Docker engine running</strong> and <strong>Kubernetes running</strong>. This takes about 2 minutes.</div>
+        <div class="code-wrap">
+          <pre><span style="color:#5A7090"># Verify Docker is up</span>
+docker info
+
+<span style="color:#5A7090"># Verify Kubernetes is up</span>
+kubectl cluster-info
+<span style="color:#5A7090"># Expected: Kubernetes control plane is running at https://kubernetes.docker.internal:6443</span></pre>
+          <button class="copy-btn">Copy</button>
+        </div>
+        <div class="callout warn" style="margin-top:.6rem">If <code>kubectl cluster-info</code> shows errors, Kubernetes is still starting. Wait 30 seconds and try again — do not proceed to the next step until it returns the control plane URL.</div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">2</div>
+      <div class="step-body">
+        <div class="step-title">Check which namespaces exist</div>
+        <div class="step-desc">Confirm that both namespaces survived the Docker restart.</div>
+        <div class="code-wrap">
+          <pre>kubectl get namespace monitoring plots-system
+<span style="color:#5A7090"># NAME           STATUS   AGE
+# monitoring     Active   Xh
+# plots-system   Active   Xh</span></pre>
+          <button class="copy-btn">Copy</button>
+        </div>
+        <div class="callout" style="margin-top:.6rem">If either namespace is missing, the cluster state was wiped (this can happen on a full Docker Desktop reset). In that case skip to <strong>Step 6 — Full reinstall</strong>.</div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">3</div>
+      <div class="step-body">
+        <div class="step-title">Scale monitoring namespace back up</div>
+        <div class="step-desc">Restarts Prometheus, Grafana, Alertmanager, and kube-state-metrics.</div>
+        <div class="code-wrap">
+          <pre>kubectl scale deployment --all --replicas=1 -n monitoring
+kubectl scale statefulset --all --replicas=1 -n monitoring</pre>
+          <button class="copy-btn">Copy</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">4</div>
+      <div class="step-body">
+        <div class="step-title">Scale exporters back up</div>
+        <div class="step-desc">Restarts Kafka, PostgreSQL, and Redis exporters in <code>plots-system</code>.</div>
+        <div class="code-wrap">
+          <pre>kubectl scale deployment kafka-exporter postgres-exporter redis-exporter \
+  --replicas=1 -n plots-system</pre>
+          <button class="copy-btn">Copy</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">5</div>
+      <div class="step-body">
+        <div class="step-title">Restore node-exporter DaemonSet</div>
+        <div class="step-desc">Only needed if you previously applied the suspend patch. Removes the dummy <code>nodeSelector</code> so the DaemonSet can schedule pods again.</div>
+        <div class="code-wrap">
+          <pre>kubectl patch daemonset monitoring-prometheus-node-exporter \
+  -n monitoring \
+  --type=json \
+  -p='[{"op":"remove","path":"/spec/template/spec/nodeSelector"}]'</pre>
+          <button class="copy-btn">Copy</button>
+        </div>
+        <div class="step-desc" style="margin-top:.5rem">If the patch returns <em>"nodeSelector not found"</em> that is fine — it means the DaemonSet was never patched and is already running normally.</div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">6</div>
+      <div class="step-body">
+        <div class="step-title">Verify all pods are running</div>
+        <div class="step-desc">Wait ~60 seconds after scaling, then check. Prometheus and Grafana take the longest to become Ready.</div>
+        <div class="code-wrap">
+          <pre>kubectl get pods -n monitoring
+<span style="color:#5A7090"># NAME                                                     READY   STATUS
+# alertmanager-monitoring-kube-prometheus-alertmanager-0   2/2     Running
+# monitoring-grafana-*                                     3/3     Running
+# monitoring-kube-prometheus-operator-*                    1/1     Running
+# monitoring-kube-state-metrics-*                          1/1     Running
+# monitoring-prometheus-node-exporter-*                    1/1     Running
+# prometheus-monitoring-kube-prometheus-prometheus-0       2/2     Running</span>
+
+kubectl get pods -n plots-system
+<span style="color:#5A7090"># kafka-exporter-*      1/1   Running  (only if Kafka is deployed)
+# postgres-exporter-*   1/1   Running  (only if plots-secrets exists)
+# redis-exporter-*      1/1   Running  (only if plots-secrets exists)</span></pre>
+          <button class="copy-btn">Copy</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">7</div>
+      <div class="step-body">
+        <div class="step-title">Open Grafana</div>
+        <div class="step-desc">Run in a separate terminal and keep it open while browsing.</div>
+        <div class="code-wrap">
+          <pre>kubectl port-forward svc/monitoring-grafana 3000:80 -n monitoring</pre>
+          <button class="copy-btn">Copy</button>
+        </div>
+        <div class="step-desc" style="margin-top:.5rem">Open <strong>http://localhost:3000</strong> &nbsp;·&nbsp; Username: <code>admin</code> &nbsp;·&nbsp; Password: <code>changeme-in-prod</code></div>
+      </div>
+    </div>
+
+  </div><!-- /steps -->
+
+  <h3 id="restart-full">Full reinstall (if namespaces are gone)</h3>
+  <p>If Docker Desktop was fully reset and the <code>monitoring</code> or <code>plots-system</code> namespaces no longer exist, run the install script from scratch. It is safe to run multiple times.</p>
+  <div class="code-wrap">
+    <pre><span style="color:#5A7090"># From the project root in Git Bash</span>
+bash k8s/monitoring/install.sh</pre>
+    <button class="copy-btn">Copy</button>
+  </div>
+  <div class="callout warn">
+    A full reinstall after a cluster reset creates <strong>fresh PVCs</strong>. Any Prometheus metrics or Grafana dashboards from before the reset are gone. This is only relevant if Docker Desktop was reset — a normal restart preserves everything.
+  </div>
+
+  <h3>Quick restart reference</h3>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>Situation</th><th>What to run</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Docker Desktop restarted normally (machine reboot, app restart)</td>
+          <td>Steps 1 → 7 above (scale back up)</td>
+        </tr>
+        <tr>
+          <td>Ran <code>docker stop $(docker ps -q)</code> to stop containers</td>
+          <td>Start Docker Desktop → Steps 1 → 7</td>
+        </tr>
+        <tr>
+          <td>Cluster still running, only monitoring was suspended (scale=0)</td>
+          <td>Steps 3 → 7 only (skip cluster check)</td>
+        </tr>
+        <tr>
+          <td>Docker Desktop was <strong>Reset to factory defaults</strong></td>
+          <td>Steps 1 → 2 → Full reinstall (<code>bash k8s/monitoring/install.sh</code>)</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ── TEARDOWN ───────────────────────────────────────── -->
+<section class="doc-section" id="teardown">
+  <h2>Teardown</h2>
+  <p>Three levels of teardown are available depending on whether you want to pause monitoring temporarily, remove the stack entirely, or nuke everything including stored data.</p>
+
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Goal</th><th>Commands below</th></tr></thead>
+      <tbody>
+        <tr><td>Stop port-forwards only (keep cluster running)</td><td><a href="#teardown-portforward" style="color:var(--monitor)">Stop port-forwards</a></td></tr>
+        <tr><td>Remove everything, keep PVC data</td><td><a href="#teardown-soft" style="color:var(--monitor)">Soft teardown</a></td></tr>
+        <tr><td>Remove everything including all stored metrics</td><td><a href="#teardown-full" style="color:var(--danger)">Full teardown</a></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Stop port-forwards -->
+  <h3 id="teardown-portforward">Stop port-forwards</h3>
+  <p>Port-forwards are just local processes — closing the terminal window is enough. To kill them programmatically:</p>
+  <div class="code-wrap">
+    <pre><span style="color:#5A7090"># PowerShell — kill all kubectl port-forward processes</span>
+Get-Process kubectl -ErrorAction SilentlyContinue | Stop-Process -Force</pre>
+    <button class="copy-btn">Copy</button>
+  </div>
+  <div class="code-wrap">
+    <pre><span style="color:#5A7090"># Git Bash / Linux</span>
+pkill -f "kubectl port-forward"</pre>
+    <button class="copy-btn">Copy</button>
+  </div>
+  <p>The cluster keeps running untouched. Restart port-forwards any time with the commands in the <a href="#access" style="color:var(--monitor)">Accessing UIs</a> section.</p>
+
+  <!-- Soft teardown -->
+  <h3 id="teardown-soft">Soft teardown — remove stack, keep PVC data</h3>
+  <p>Uninstalls the Helm release and deletes the custom resources applied manually. PVCs are <strong>not</strong> deleted by default, so all historical metrics and Grafana state survive and can be re-attached if you reinstall.</p>
+
+  <div class="steps">
+    <div class="step">
+      <div class="step-num">1</div>
+      <div class="step-body">
+        <div class="step-title">Delete ServiceMonitors</div>
+        <div class="step-desc">Remove the 9 ServiceMonitor CRDs so Prometheus stops trying to scrape.</div>
+        <div class="code-wrap">
+          <pre>kubectl delete -f k8s/monitoring/servicemonitors.yaml</pre>
+          <button class="copy-btn">Copy</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">2</div>
+      <div class="step-body">
+        <div class="step-title">Delete infrastructure exporters</div>
+        <div class="step-desc">Removes the Kafka, PostgreSQL, and Redis exporter Deployments and Services from <code>plots-system</code>.</div>
+        <div class="code-wrap">
+          <pre>kubectl delete -f k8s/monitoring/exporters.yaml</pre>
+          <button class="copy-btn">Copy</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">3</div>
+      <div class="step-body">
+        <div class="step-title">Uninstall the Helm release</div>
+        <div class="step-desc">Removes Prometheus, Grafana, Alertmanager, node-exporter, kube-state-metrics, and all related ConfigMaps, Secrets, and RBAC. PVCs are left intact.</div>
+        <div class="code-wrap">
+          <pre>helm uninstall monitoring --namespace monitoring</pre>
+          <button class="copy-btn">Copy</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-num">4</div>
+      <div class="step-body">
+        <div class="step-title">Verify removal</div>
+        <div class="code-wrap">
+          <pre>kubectl get all -n monitoring
+<span style="color:#5A7090"># Should return: No resources found in monitoring namespace.</span>
+
+kubectl get pvc -n monitoring
+<span style="color:#5A7090"># PVCs are still present — this is expected for a soft teardown.</span></pre>
+          <button class="copy-btn">Copy</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="callout ok">
+    <strong>To reinstall later</strong>, simply run <code>bash k8s/monitoring/install.sh</code> again. Helm will recreate all resources and the Prometheus StatefulSet will re-attach to the existing PVC, recovering all historical metric data.
+  </div>
+
+  <!-- Full teardown -->
+  <h3 id="teardown-full">Full teardown — remove everything including stored data</h3>
+  <div class="callout danger">
+    <strong>Irreversible.</strong> Deleting PVCs permanently destroys all stored metrics, Grafana dashboards, and Alertmanager silences. There is no undo.
+  </div>
+
+  <p>Run the soft teardown steps above first, then delete the PVCs and namespace:</p>
+
+  <div class="code-wrap">
+    <pre><span style="color:#5A7090"># 1. Delete the Helm release + exporters + ServiceMonitors (steps 1-3 above)</span>
+kubectl delete -f k8s/monitoring/servicemonitors.yaml
+kubectl delete -f k8s/monitoring/exporters.yaml
+helm uninstall monitoring --namespace monitoring
+
+<span style="color:#5A7090"># 2. Delete PVCs (Prometheus 50 Gi + Grafana 10 Gi + Alertmanager 5 Gi)</span>
+kubectl delete pvc --all -n monitoring
+
+<span style="color:#5A7090"># 3. Delete the monitoring namespace itself</span>
+kubectl delete namespace monitoring</pre>
+    <button class="copy-btn">Copy</button>
+  </div>
+
+  <div class="code-wrap">
+    <pre><span style="color:#5A7090"># Confirm everything is gone</span>
+kubectl get namespace monitoring
+<span style="color:#5A7090"># Error from server (NotFound): namespaces "monitoring" not found</span></pre>
+    <button class="copy-btn">Copy</button>
+  </div>
+
+  <div class="callout warn">
+    The <code>plots-system</code> namespace and application services are <strong>not affected</strong> by either teardown. Only the monitoring components are removed.
+  </div>
+
+  <!-- Partial teardown: individual components -->
+  <h3>Remove individual components</h3>
+  <p>To disable a specific component without touching the rest, scale its Deployment to zero or disable it in <code>helm-values.yaml</code> and re-apply.</p>
+
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Component</th><th>Remove command</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>kafka-exporter only</td>
+          <td><code>kubectl delete deploy,svc kafka-exporter -n plots-system</code></td>
+        </tr>
+        <tr>
+          <td>postgres-exporter only</td>
+          <td><code>kubectl delete deploy,svc postgres-exporter -n plots-system</code></td>
+        </tr>
+        <tr>
+          <td>redis-exporter only</td>
+          <td><code>kubectl delete deploy,svc redis-exporter -n plots-system</code></td>
+        </tr>
+        <tr>
+          <td>Grafana (keep Prometheus)</td>
+          <td>Set <code>grafana.enabled: false</code> in <code>helm-values.yaml</code>, then <code>helm upgrade</code></td>
+        </tr>
+        <tr>
+          <td>Alertmanager (keep Prometheus)</td>
+          <td>Set <code>alertmanager.enabled: false</code> in <code>helm-values.yaml</code>, then <code>helm upgrade</code></td>
+        </tr>
+        <tr>
+          <td>node-exporter (keep everything else)</td>
+          <td>Set <code>nodeExporter.enabled: false</code> in <code>helm-values.yaml</code>, then <code>helm upgrade</code></td>
+        </tr>
+        <tr>
+          <td>One ServiceMonitor (stop scraping one service)</td>
+          <td><code>kubectl delete servicemonitor &lt;name&gt; -n monitoring</code></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+</main>
+</div>
+
+<script>
+// Copy buttons
+document.querySelectorAll('.code-wrap').forEach(wrap => {
+  const btn = wrap.querySelector('.copy-btn');
+  if (!btn) return;
+  btn.addEventListener('click', () => {
+    const pre = wrap.querySelector('pre');
+    navigator.clipboard.writeText(pre.innerText.trim()).then(() => {
+      btn.textContent = 'Copied!';
+      btn.classList.add('copied');
+      setTimeout(() => { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 2000);
+    });
+  });
+});
+
+// Active sidebar nav on scroll
+const sections = document.querySelectorAll('[id]');
+const navLinks = document.querySelectorAll('.nav-link[href^="#"]');
+const obs = new IntersectionObserver(entries => {
+  entries.forEach(e => {
+    if (e.isIntersecting) {
+      navLinks.forEach(a => a.classList.toggle('active', a.getAttribute('href') === '#' + e.target.id));
+    }
+  });
+}, { rootMargin: '-15% 0px -75% 0px' });
+sections.forEach(s => obs.observe(s));
+</script>
+</body>
+</html>

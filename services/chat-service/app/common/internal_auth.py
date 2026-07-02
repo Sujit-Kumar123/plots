@@ -4,7 +4,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 
 from app.config import settings
 
-_SKIP = frozenset({"/health", "/health/ready"})
+_SKIP = frozenset({"/health", "/health/ready", "/metrics"})
 
 
 class InternalAuthMiddleware(BaseHTTPMiddleware):

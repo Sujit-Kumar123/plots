@@ -65,10 +65,13 @@ kind: Service
 metadata:
   name: payment-service
   namespace: plots-system
+  labels:
+    app: payment-service
 spec:
   selector:
     app: payment-service
   ports:
-    - port: 8011
+    - name: http
+      port: 8011
       targetPort: 8011
   type: ClusterIP

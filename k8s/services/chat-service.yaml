@@ -67,10 +67,13 @@ kind: Service
 metadata:
   name: chat-service
   namespace: plots-system
+  labels:
+    app: chat-service
 spec:
   selector:
     app: chat-service
   ports:
-    - port: 8001
+    - name: http
+      port: 8001
       targetPort: 8001
   type: ClusterIP

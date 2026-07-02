@@ -5,6 +5,8 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
 
+from prometheus_fastapi_instrumentator import Instrumentator
+
 from app.common.exceptions import register_exception_handlers
 from app.common.responses import ResponseHandler
 from app.common.health import router as health_router
@@ -64,6 +66,7 @@ app.add_middleware(
 )
 
 register_exception_handlers(app)
+Instrumentator(excluded_handlers=["/health.*", "/metrics"]).instrument(app).expose(app)
 
 
 @app.exception_handler(RequestValidationError)
