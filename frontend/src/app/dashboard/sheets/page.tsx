@@ -45,7 +45,7 @@ export default async function SheetsPage({ searchParams }: Props) {
 
       <Card>
         <CardContent className="pt-6">
-          <Suspense key={`${page}-${page_size}-${search}`} fallback={<SheetsGridSkeleton pageSize={page_size} />}>
+          <Suspense key={`${page}-${page_size}`} fallback={<SheetsGridSkeleton pageSize={page_size} />}>
             <SheetsList page={page} page_size={page_size} search={search} />
           </Suspense>
         </CardContent>

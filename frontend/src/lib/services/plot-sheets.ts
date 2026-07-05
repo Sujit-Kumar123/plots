@@ -1,4 +1,6 @@
-import { api } from "@/lib/api"
+"use server"
+
+import { cqrsFetch } from "@/lib/server-api"
 import type { BlockInfo, DivPanelInfo, TextInfo, WallInfo } from "@/app/plot/_components/_types"
 
 // ── Serialised element types ──────────────────────────────────────────────────
@@ -53,7 +55,6 @@ export interface SheetListItem {
   updated_at: string
 }
 
-// Paginated list shape — compatible with existing sheets grid UI
 export interface PaginatedSheets {
   items: SheetListItem[]
   total: number
@@ -62,14 +63,13 @@ export interface PaginatedSheets {
   total_pages: number
 }
 
-// Minimal response from CQRS command services (write side)
 export interface SheetCommandResult {
   id: string
   name?: string
   version: number
 }
 
-// ── API calls ─────────────────────────────────────────────────────────────────
+// ── Server actions ────────────────────────────────────────────────────────────
 
 export async function apiCreateSheet(payload: {
   name: string
@@ -78,11 +78,18 @@ export async function apiCreateSheet(payload: {
   grid_step: number
   elements: SheetElements
 }): Promise<SheetCommandResult> {
-  return api.post<SheetCommandResult>("/v1/plots", payload)
+  const result = await cqrsFetch<SheetCommandResult>("/api/v1/plots", {
+    method: "POST",
+    body: payload,
+  })
+  if (!result) throw new Error("Failed to create sheet")
+  return result
 }
 
 export async function apiGetSheet(id: string): Promise<SheetData> {
-  return api.get<SheetData>(`/v1/plots/${id}`)
+  const result = await cqrsFetch<SheetData>(`/api/v1/plots/${id}`)
+  if (!result) throw new Error(`Sheet ${id} not found`)
+  return result
 }
 
 export async function apiUpdateSheet(
@@ -95,14 +102,24 @@ export async function apiUpdateSheet(
     elements?: SheetElements
   },
 ): Promise<SheetCommandResult> {
-  return api.put<SheetCommandResult>(`/v1/plots/${id}`, payload)
+  const result = await cqrsFetch<SheetCommandResult>(`/api/v1/plots/${id}`, {
+    method: "PUT",
+    body: payload,
+  })
+  if (!result) throw new Error(`Failed to update sheet ${id}`)
+  return result
 }
 
 export async function apiListSheets(): Promise<SheetListItem[]> {
-  const resp = await api.get<{ total: number; limit: number; offset: number; items: SheetListItem[] }>("/v1/plots")
-  return resp.items
+  const resp = await cqrsFetch<{
+    total: number
+    limit: number
+    offset: number
+    items: SheetListItem[]
+  }>("/api/v1/plots")
+  return resp?.items ?? []
 }
 
 export async function apiDeleteSheet(id: string): Promise<void> {
-  await api.delete<void>(`/v1/plots/${id}`)
+  await cqrsFetch<void>(`/api/v1/plots/${id}`, { method: "DELETE" })
 }

@@ -16,12 +16,74 @@ interface FetchOptions {
   next?: { tags?: string[]; revalidate?: number | false }
 }
 
-async function getAuthHeaders(): Promise<HeadersInit> {
-  const cookieStore = await cookies()
-  const token = cookieStore.get("access_token")?.value
+// ── Server-side refresh mutex ─────────────────────────────────────────────────
+// When concurrent server actions from the same user all receive a 401, only
+// ONE /auth/refresh call is made. Others wait on the shared promise so the
+// backend's refresh-token rotation only needs to happen once.
+//
+//   Access token expired
+//         │
+//         ▼
+//   5 server actions get 401
+//         │
+//         ▼
+//   Action #1: no lock for this refresh_token → starts refresh, sets lock
+//   Actions #2-5: lock exists → await the same promise
+//         │
+//         ▼
+//   Refresh succeeds → returns new access_token to all 5 callers
+//         │
+//         ▼
+//   Each server action retries with the new token
 
-  // Forward the browser's real IP so the backend rate-limiter buckets by
-  // actual user, not by the Next.js server address (127.0.0.1).
+const _refreshInFlight = new Map<string, Promise<string | null>>()
+
+async function refreshServerToken(): Promise<string | null> {
+  const cookieStore = await cookies()
+  const refreshToken = cookieStore.get("refresh_token")?.value
+  if (!refreshToken) return null
+
+  // Reuse an in-flight refresh for the same refresh_token
+  const existing = _refreshInFlight.get(refreshToken)
+  if (existing) return existing
+
+  const promise = (async (): Promise<string | null> => {
+    try {
+      const res = await fetch(`${BACKEND}/api/auth/refresh`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Cookie: `refresh_token=${refreshToken}`,
+        },
+        cache: "no-store",
+      })
+      if (!res.ok) return null
+
+      // Prefer token in response body; fall back to Set-Cookie header
+      const body = await res.json().catch(() => null)
+      if (body?.access_token) return body.access_token as string
+
+      const setCookie = res.headers.get("set-cookie") ?? ""
+      const match = setCookie.match(/(?:^|,\s*)access_token=([^;,\s]+)/)
+      return match?.[1] ?? null
+    } finally {
+      _refreshInFlight.delete(refreshToken)
+    }
+  })()
+
+  _refreshInFlight.set(refreshToken, promise)
+  return promise
+}
+
+async function getAuthHeaders(overrideToken?: string): Promise<HeadersInit> {
+  let token: string | undefined = overrideToken
+  if (!token) {
+    const cookieStore = await cookies()
+    token = cookieStore.get("access_token")?.value
+  }
+
+  // Forward the real client IP so the backend rate-limiter buckets by user,
+  // not by the Next.js server address.
   let clientIp: string | undefined
   try {
     const h = await headers()
@@ -40,40 +102,45 @@ async function getAuthHeaders(): Promise<HeadersInit> {
   }
 }
 
-// Calls the CQRS api-gateway directly. Returns raw JSON (no {success,data} wrapper).
-export async function cqrsFetch<T>(
-  path: string,
-  { method = "GET", body, next }: FetchOptions = {},
-): Promise<T | null> {
-  const res = await fetch(`${CQRS_GATEWAY}${path}`, {
-    method,
-    headers: await getAuthHeaders(),
-    ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
-    ...(next ? { next } : { cache: "no-store" }),
-  })
-
-  if (res.status === 204) return null
-
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}))
-    throw new Error(err?.detail ?? err?.message ?? `Request failed (${res.status})`)
+async function persistNewToken(newToken: string) {
+  try {
+    const cs = await cookies()
+    cs.set("access_token", newToken, {
+      httpOnly: true,
+      path: "/",
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+    })
+  } catch {
+    // cookies().set() is only available inside server actions / route handlers
   }
-
-  return res.json() as Promise<T>
 }
+
+// ── serverFetch ───────────────────────────────────────────────────────────────
+// Calls the main backend (auth-service, profile-service, admin-service, etc.)
+// Unwraps the standard { success, data, message, errors } envelope.
 
 export async function serverFetch<T>(
   path: string,
   { method = "GET", body, next }: FetchOptions = {},
+  _retryToken?: string,
 ): Promise<T | null> {
   const res = await fetch(`${BACKEND}${path}`, {
     method,
-    headers: await getAuthHeaders(),
+    headers: await getAuthHeaders(_retryToken),
     ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
-    // When `next` is provided (e.g. tags), let Next.js manage caching;
-    // otherwise disable caching so mutations are always fresh.
     ...(next ? { next } : { cache: "no-store" }),
   })
+
+  // Auto-refresh on 401, retry once with the new token
+  if (res.status === 401 && _retryToken === undefined) {
+    const newToken = await refreshServerToken()
+    if (newToken) {
+      await persistNewToken(newToken)
+      return serverFetch(path, { method, body, next }, newToken)
+    }
+    throw new Error("Session expired. Please log in again.")
+  }
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({}))
@@ -82,4 +149,39 @@ export async function serverFetch<T>(
 
   const json: ServerApiResponse<T> = await res.json()
   return json.data ?? null
+}
+
+// ── cqrsFetch ─────────────────────────────────────────────────────────────────
+// Calls the CQRS api-gateway directly. Returns raw JSON (no envelope wrapper).
+
+export async function cqrsFetch<T>(
+  path: string,
+  { method = "GET", body, next }: FetchOptions = {},
+  _retryToken?: string,
+): Promise<T | null> {
+  const res = await fetch(`${CQRS_GATEWAY}${path}`, {
+    method,
+    headers: await getAuthHeaders(_retryToken),
+    ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+    ...(next ? { next } : { cache: "no-store" }),
+  })
+
+  if (res.status === 204) return null
+
+  // Auto-refresh on 401, retry once with the new token
+  if (res.status === 401 && _retryToken === undefined) {
+    const newToken = await refreshServerToken()
+    if (newToken) {
+      await persistNewToken(newToken)
+      return cqrsFetch(path, { method, body, next }, newToken)
+    }
+    throw new Error("Session expired. Please log in again.")
+  }
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err?.detail ?? err?.message ?? `Request failed (${res.status})`)
+  }
+
+  return res.json() as Promise<T>
 }

@@ -1,4 +1,6 @@
-import { api } from "@/lib/api"
+"use server"
+
+import { cqrsFetch } from "@/lib/server-api"
 
 export interface ChatMessage {
   id: string
@@ -33,8 +35,8 @@ interface CqrsSessionList {
 }
 
 export async function listChatSessions(): Promise<ChatSession[]> {
-  const resp = await api.get<CqrsSessionList>("/v1/chat/sessions")
-  return resp.items
+  const resp = await cqrsFetch<CqrsSessionList>("/api/v1/chat/sessions")
+  return resp?.items ?? []
 }
 
 export async function getSessionMessages(
@@ -42,10 +44,10 @@ export async function getSessionMessages(
   limit = 50,
   offset = 0,
 ): Promise<ChatMessage[]> {
-  const resp = await api.get<CqrsMessageList>(
-    `/v1/chat/sessions/${sessionId}/messages?limit=${limit}&offset=${offset}`,
+  const resp = await cqrsFetch<CqrsMessageList>(
+    `/api/v1/chat/sessions/${sessionId}/messages?limit=${limit}&offset=${offset}`,
   )
-  return resp.items
+  return resp?.items ?? []
 }
 
 export async function saveMessage(
@@ -54,10 +56,15 @@ export async function saveMessage(
   content: string,
   model?: string,
 ): Promise<{ id: string }> {
-  return api.post<{ id: string }>("/v1/chat/messages", {
-    session_id: sessionId,
-    role,
-    content,
-    model: model ?? null,
+  const result = await cqrsFetch<{ id: string }>("/api/v1/chat/messages", {
+    method: "POST",
+    body: {
+      session_id: sessionId,
+      role,
+      content,
+      model: model ?? null,
+    },
   })
+  if (!result) throw new Error("Failed to save message")
+  return result
 }

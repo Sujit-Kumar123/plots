@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useTransition, useCallback } from "react"
+import { useState, useTransition, useCallback, useEffect, useRef } from "react"
 import Link from "next/link"
 import { useRouter, usePathname, useSearchParams } from "next/navigation"
 import { ExternalLink, LayoutTemplate, Search, Trash2, X } from "lucide-react"
@@ -167,8 +167,26 @@ export function SheetsGrid({ data, search }: SheetsGridProps) {
   const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
-  const [, startTransition] = useTransition()
+  const [isPending, startTransition] = useTransition()
   const [searchValue, setSearchValue] = useState(search)
+
+  // ── Focus preservation ────────────────────────────────────────────────────
+  // router.push inside startTransition causes the server component to re-fetch
+  // and re-render, which drops browser focus from the input. We track whether
+  // the input was focused when the transition started and restore it when done.
+  const inputRef = useRef<HTMLInputElement>(null)
+  const hadFocusRef = useRef(false)
+
+  useEffect(() => {
+    if (!isPending && hadFocusRef.current) {
+      inputRef.current?.focus()
+      hadFocusRef.current = false
+    }
+  }, [isPending])
+
+  // ── Debounced URL update ──────────────────────────────────────────────────
+  // Avoids a navigation on every keystroke — waits until typing pauses 350 ms.
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const updateParams = useCallback(
     (updates: Record<string, string | undefined>) => {
@@ -180,6 +198,7 @@ export function SheetsGrid({ data, search }: SheetsGridProps) {
           params.set(key, value)
         }
       }
+      hadFocusRef.current = document.activeElement === inputRef.current
       startTransition(() => {
         router.push(`${pathname}?${params.toString()}`)
       })
@@ -189,7 +208,10 @@ export function SheetsGrid({ data, search }: SheetsGridProps) {
 
   function handleSearch(value: string) {
     setSearchValue(value)
-    updateParams({ search: value || undefined, page: "1" })
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+    debounceRef.current = setTimeout(() => {
+      updateParams({ search: value || undefined, page: "1" })
+    }, 350)
   }
 
   function handlePageChange(page: number) {
@@ -200,12 +222,15 @@ export function SheetsGrid({ data, search }: SheetsGridProps) {
     updateParams({ page_size: String(size), page: "1" })
   }
 
+  const skeletonCount = Math.min(data.page_size || 12, 12)
+
   return (
     <div className="flex flex-col gap-4">
       {/* Search bar */}
       <div className="relative w-full max-w-sm">
         <Search className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
         <Input
+          ref={inputRef}
           placeholder="Search sheets…"
           value={searchValue}
           onChange={(e) => handleSearch(e.target.value)}
@@ -221,8 +246,14 @@ export function SheetsGrid({ data, search }: SheetsGridProps) {
         )}
       </div>
 
-      {/* Grid */}
-      {data.items.length === 0 ? (
+      {/* Grid — skeleton while transition is in flight */}
+      {isPending ? (
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          {Array.from({ length: skeletonCount }).map((_, i) => (
+            <SheetCardSkeleton key={i} />
+          ))}
+        </div>
+      ) : data.items.length === 0 ? (
         <EmptyState filtered={!!searchValue} />
       ) : (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
@@ -232,19 +263,21 @@ export function SheetsGrid({ data, search }: SheetsGridProps) {
         </div>
       )}
 
-      {/* Pagination */}
+      {/* Pagination — dimmed while loading */}
       {data.total > 0 && (
         <>
           <Separator />
-          <DataTablePagination
-            page={data.page}
-            pageSize={data.page_size}
-            total={data.total}
-            totalPages={data.total_pages}
-            onPageChange={handlePageChange}
-            onPageSizeChange={handlePageSizeChange}
-            pageSizeOptions={[6, 12, 24, 48]}
-          />
+          <div className={isPending ? "pointer-events-none opacity-50" : undefined}>
+            <DataTablePagination
+              page={data.page}
+              pageSize={data.page_size}
+              total={data.total}
+              totalPages={data.total_pages}
+              onPageChange={handlePageChange}
+              onPageSizeChange={handlePageSizeChange}
+              pageSizeOptions={[6, 12, 24, 48]}
+            />
+          </div>
         </>
       )}
     </div>

@@ -28,9 +28,7 @@ import { PasswordInput } from "@/components/ui/password-input"
 import { Separator } from "@/components/ui/separator"
 import { Spinner } from "@/components/ui/spinner"
 import { useAuth } from "@/context/auth-context"
-import { api } from "@/lib/api"
-import { changePassword } from "@/lib/services/client/auth"
-import type { ApiResponse, AuthUser } from "@/lib/types/auth"
+import { updateProfile, changePasswordAction } from "@/lib/services/server/profile"
 
 const roleVariant: Record<string, "default" | "secondary" | "outline"> = {
   superadmin: "default",
@@ -89,7 +87,7 @@ export default function ProfilePage() {
     setProfileErr("")
     setProfileSaving(true)
     try {
-      await api.patch<ApiResponse<AuthUser>>("/profile/me", { fname, lname, phone })
+      await updateProfile({ fname, lname, phone })
       await refreshUser()
       setProfileMsg("Profile updated successfully")
     } catch (err) {
@@ -109,7 +107,7 @@ export default function ProfilePage() {
     }
     setPwdSaving(true)
     try {
-      await changePassword(curPwd, newPwd)
+      await changePasswordAction(curPwd, newPwd)
       setPwdMsg("Password changed successfully")
       setCurPwd("")
       setNewPwd("")
