@@ -9,12 +9,8 @@ import {
 } from "react"
 import { useRouter } from "next/navigation"
 
-import {
-  login as authLogin,
-  register as authRegister,
-  logout as authLogout,
-  getMe,
-} from "@/lib/services/client/auth"
+import { loginAction, registerAction, logoutAction } from "@/lib/services/server/auth"
+import { getMeAction } from "@/lib/services/server/profile"
 import type { AuthUser } from "@/lib/types/auth"
 
 interface AuthContextValue {
@@ -39,7 +35,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter()
 
   const refreshUser = useCallback(async () => {
-    setUser(await getMe())
+    setUser(await getMeAction())
   }, [])
 
   useEffect(() => {
@@ -47,7 +43,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [refreshUser])
 
   const login = async (email: string, password: string) => {
-    const { user } = await authLogin(email, password)
+    const user = await loginAction(email, password)
     setUser(user)
     router.push("/dashboard")
   }
@@ -58,20 +54,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     fname?: string,
     lname?: string,
   ) => {
-    const { user } = await authRegister(email, password, fname, lname)
+    const user = await registerAction(email, password, fname, lname)
     setUser(user)
     router.push("/dashboard")
   }
 
   const logout = async () => {
     try {
-      await authLogout()
+      await logoutAction()
     } catch {
       // Proceed with client-side cleanup even if the server call fails
     } finally {
       setUser(null)
-      // Full navigation ensures the browser flushes Set-Cookie headers before
-      // the next request, so the middleware won't redirect back to /dashboard.
       window.location.replace("/login")
     }
   }

@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { cn } from "@/lib/utils"
-import { forgotPassword } from "@/lib/services/client/auth"
+import { forgotPasswordAction } from "@/lib/services/server/auth"
 import { Button } from "@/components/ui/button"
 import {
   Card,
@@ -34,7 +34,7 @@ export function ForgotPasswordForm({
     setError("")
     setLoading(true)
     try {
-      await forgotPassword(email)
+      await forgotPasswordAction(email)
       setSent(true)
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong")

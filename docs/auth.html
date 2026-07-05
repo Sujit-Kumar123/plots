@@ -1,0 +1,1005 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Authentication — Plots Docs</title>
+<meta name="description" content="Complete reference for the Plots auth system: registration, login, token refresh, SSO, roles, permissions, and gateway middleware.">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+img,svg{max-width:100%;display:block}
+a{color:inherit;text-decoration:none}
+button{cursor:pointer;border:none;background:none;font:inherit}
+
+:root{
+  --bg:        #0B1120;
+  --surface:   #111827;
+  --surface-2: #172032;
+  --surface-3: #1C2840;
+  --border:    #1E3050;
+  --border-hi: #2A4070;
+
+  --write:   #2563EB;
+  --write-lo:#1a3d80;
+  --read:    #0D9488;
+  --read-lo: #0a5c53;
+  --gateway: #7C3AED;
+  --danger:  #DC2626;
+  --warn:    #C2872B;
+  --success: #16a34a;
+
+  --text:      #B8C9DC;
+  --text-bright:#E2EAF4;
+  --text-muted: #5A7090;
+  --text-code:  #93C5FD;
+
+  --font-body: 'Trebuchet MS','Gill Sans',system-ui,-apple-system,sans-serif;
+  --font-mono: ui-monospace,'Cascadia Code','JetBrains Mono','Fira Code','Courier New',monospace;
+
+  --sidebar-w: 262px;
+  --radius: 6px;
+  --radius-sm: 4px;
+}
+
+body{
+  background:var(--bg);
+  color:var(--text);
+  font-family:var(--font-body);
+  font-size:14.5px;
+  line-height:1.65;
+  min-height:100vh;
+}
+h1,h2,h3,h4,h5{color:var(--text-bright);font-family:var(--font-body);text-wrap:balance;line-height:1.25}
+h1{font-size:2rem;font-weight:700;letter-spacing:-.02em}
+h2{font-size:1.35rem;font-weight:600;letter-spacing:-.015em;margin-bottom:.9rem;padding-bottom:.5rem;border-bottom:1px solid var(--border)}
+h3{font-size:1.05rem;font-weight:600;margin-bottom:.6rem}
+h4{font-size:.85rem;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:.5rem}
+p{margin-bottom:.75rem;max-width:72ch}
+ul,ol{padding-left:1.3rem;margin-bottom:.75rem}
+li{margin-bottom:.3rem}
+
+code{
+  font-family:var(--font-mono);font-size:.82em;
+  color:var(--text-code);background:var(--surface-2);
+  padding:.15em .4em;border-radius:3px;border:1px solid var(--border);
+}
+pre{
+  font-family:var(--font-mono);font-size:.82rem;
+  background:var(--surface-2);border:1px solid var(--border);
+  border-radius:var(--radius);padding:1rem 1.1rem;
+  overflow-x:auto;line-height:1.55;color:#B8C9DC;margin-bottom:1rem;
+}
+pre code{background:none;border:none;padding:0;font-size:1em;color:inherit}
+
+/* ── Layout ── */
+.layout{display:flex;min-height:100vh}
+
+.sidebar{
+  position:fixed;top:0;left:0;bottom:0;width:var(--sidebar-w);
+  background:var(--surface);border-right:1px solid var(--border);
+  overflow-y:auto;padding:1.5rem 0 2rem;z-index:40;
+  scrollbar-width:thin;scrollbar-color:var(--border) transparent;
+}
+.sidebar::-webkit-scrollbar{width:4px}
+.sidebar::-webkit-scrollbar-track{background:transparent}
+.sidebar::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+
+.sidebar-logo{padding:.25rem 1.4rem 1.2rem;border-bottom:1px solid var(--border);margin-bottom:.75rem}
+.sidebar-logo .name{font-size:1.1rem;font-weight:700;color:var(--text-bright);letter-spacing:-.02em;display:flex;align-items:center;gap:.45rem}
+.logo-dot{width:10px;height:10px;border-radius:50%;background:var(--gateway);flex-shrink:0}
+.sidebar-logo .sub{font-size:.75rem;color:var(--text-muted);margin-top:.2rem}
+
+.nav-group{margin-bottom:.25rem}
+.nav-group-label{font-size:.68rem;font-weight:600;text-transform:uppercase;letter-spacing:.1em;color:var(--text-muted);padding:.6rem 1.4rem .3rem;display:block}
+.nav-link{
+  display:flex;align-items:center;gap:.55rem;
+  padding:.38rem 1.4rem;font-size:.82rem;color:var(--text-muted);
+  transition:color .15s,background .15s;border-left:2px solid transparent;
+}
+.nav-link:hover{color:var(--text);background:var(--surface-2)}
+.nav-link.active{color:var(--text-bright);border-left-color:var(--gateway);background:rgba(124,58,237,.07)}
+.nav-link .dot{width:6px;height:6px;border-radius:50%;flex-shrink:0;opacity:.6}
+.nav-link.active .dot{opacity:1}
+.dot-auth{background:#f59e0b}
+.dot-token{background:#3b82f6}
+.dot-sso{background:#8b5cf6}
+.dot-rbac{background:#10b981}
+.dot-gw{background:var(--gateway)}
+.dot-fe{background:#06b6d4}
+
+.main{
+  margin-left:var(--sidebar-w);flex:1;
+  padding:2.5rem 3rem 4rem;
+  max-width:calc(var(--sidebar-w) + 900px);
+}
+
+section{margin-bottom:3.5rem}
+section:first-child{margin-bottom:2.5rem}
+
+/* ── Components ── */
+.badge{
+  display:inline-flex;align-items:center;
+  font-family:var(--font-mono);font-size:.72rem;font-weight:600;
+  padding:.18em .55em;border-radius:3px;letter-spacing:.02em;white-space:nowrap;
+}
+.badge-post{background:#1e3a1e;color:#4ade80;border:1px solid #166534}
+.badge-get{background:#1e3050;color:#60a5fa;border:1px solid #1e3a8a}
+.badge-delete{background:#3b1a1a;color:#f87171;border:1px solid #7f1d1d}
+.badge-patch{background:#2d1f00;color:#fbbf24;border:1px solid #78350f}
+.badge-public{background:#0f1f0f;color:#6ee7b7;border:1px solid #14532d;font-family:var(--font-body);font-size:.7rem;text-transform:uppercase;letter-spacing:.06em}
+.badge-auth{background:#1e1e3a;color:#a78bfa;border:1px solid #4c1d95;font-family:var(--font-body);font-size:.7rem;text-transform:uppercase;letter-spacing:.06em}
+
+.endpoint-table{width:100%;border-collapse:collapse;font-size:.84rem;margin-bottom:1.25rem}
+.endpoint-table th{text-align:left;padding:.5rem .75rem;background:var(--surface-2);color:var(--text-muted);font-weight:600;font-size:.72rem;text-transform:uppercase;letter-spacing:.07em;border:1px solid var(--border)}
+.endpoint-table td{padding:.5rem .75rem;border:1px solid var(--border);vertical-align:top}
+.endpoint-table tr:nth-child(even) td{background:rgba(17,24,39,.45)}
+.endpoint-table td code{font-size:.8em}
+
+.flow{
+  display:flex;flex-direction:column;gap:0;
+  border:1px solid var(--border);border-radius:var(--radius);
+  overflow:hidden;margin-bottom:1.25rem;
+}
+.flow-step{
+  display:grid;grid-template-columns:2.2rem 1fr;
+  gap:0;border-bottom:1px solid var(--border);
+  background:var(--surface-2);
+}
+.flow-step:last-child{border-bottom:none}
+.flow-step:nth-child(even){background:rgba(28,40,64,.6)}
+.step-num{
+  display:flex;align-items:center;justify-content:center;
+  font-family:var(--font-mono);font-size:.72rem;font-weight:700;
+  color:var(--text-muted);background:var(--surface-3);
+  border-right:1px solid var(--border);padding:.65rem 0;
+}
+.step-body{padding:.6rem .9rem}
+.step-body strong{color:var(--text-bright);font-size:.86rem}
+.step-body p{font-size:.84rem;color:var(--text);margin:.15rem 0 0;max-width:none}
+
+.callout{
+  border-left:3px solid;padding:.7rem 1rem;
+  border-radius:0 var(--radius) var(--radius) 0;
+  margin-bottom:1rem;font-size:.85rem;background:var(--surface-2);
+}
+.callout-info{border-color:#3b82f6}
+.callout-warn{border-color:var(--warn)}
+.callout-danger{border-color:var(--danger)}
+.callout-tip{border-color:var(--read)}
+.callout-title{font-weight:700;font-size:.78rem;text-transform:uppercase;letter-spacing:.07em;margin-bottom:.35rem}
+.callout-info .callout-title{color:#60a5fa}
+.callout-warn .callout-title{color:#fbbf24}
+.callout-danger .callout-title{color:#f87171}
+.callout-tip .callout-title{color:#34d399}
+
+.token-field{
+  display:grid;grid-template-columns:max-content 1fr;
+  gap:.35rem 1.2rem;align-items:baseline;
+  background:var(--surface-2);border:1px solid var(--border);
+  border-radius:var(--radius);padding:.85rem 1rem;margin-bottom:1rem;
+}
+.tf-key{font-family:var(--font-mono);font-size:.8rem;color:#fbbf24;white-space:nowrap}
+.tf-val{font-size:.84rem;color:var(--text)}
+.tf-val code{font-size:.85em}
+
+.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1rem}
+.grid-2 .card{background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius);padding:1rem 1.1rem}
+.card h3{font-size:.95rem;margin-bottom:.5rem}
+
+.perm-table{width:100%;border-collapse:collapse;font-size:.83rem;margin-bottom:1rem}
+.perm-table th{text-align:left;padding:.45rem .7rem;background:var(--surface-2);color:var(--text-muted);font-weight:600;font-size:.71rem;text-transform:uppercase;letter-spacing:.07em;border:1px solid var(--border)}
+.perm-table td{padding:.45rem .7rem;border:1px solid var(--border);vertical-align:top}
+.perm-table tr:nth-child(even) td{background:rgba(17,24,39,.4)}
+.perm-table td code{font-size:.8em}
+
+.mw-check{
+  display:flex;flex-direction:column;gap:0;
+  border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;margin-bottom:1rem;
+}
+.mw-row{
+  display:flex;align-items:stretch;
+  border-bottom:1px solid var(--border);font-size:.84rem;
+}
+.mw-row:last-child{border-bottom:none}
+.mw-label{
+  width:180px;flex-shrink:0;
+  background:var(--surface-3);border-right:1px solid var(--border);
+  padding:.6rem .9rem;
+  font-weight:600;font-size:.78rem;color:var(--text-muted);
+  display:flex;align-items:center;
+}
+.mw-content{padding:.6rem .9rem;flex:1;color:var(--text)}
+.mw-content p{margin:0;max-width:none;font-size:.84rem}
+.mw-content code{font-size:.78em}
+.mw-row.pass .mw-label{color:#4ade80;border-left:3px solid #4ade80}
+.mw-row.fail .mw-label{color:#f87171;border-left:3px solid #f87171}
+.mw-row.step .mw-label{color:#60a5fa;border-left:3px solid #3b82f6}
+.mw-row.warn .mw-label{color:#fbbf24;border-left:3px solid #fbbf24}
+
+.tag-row{display:flex;gap:.45rem;flex-wrap:wrap;margin-bottom:.6rem}
+.tag{font-size:.72rem;padding:.15em .55em;border-radius:3px;font-family:var(--font-mono)}
+.tag-green{background:#0f2e0f;color:#4ade80;border:1px solid #14532d}
+.tag-blue{background:#0f1e3a;color:#60a5fa;border:1px solid #1e3a8a}
+.tag-purple{background:#1e1030;color:#a78bfa;border:1px solid #4c1d95}
+.tag-amber{background:#2d1f00;color:#fbbf24;border:1px solid #78350f}
+.tag-red{background:#2d0f0f;color:#f87171;border:1px solid #7f1d1d}
+
+@media(max-width:900px){
+  .sidebar{display:none}
+  .main{margin-left:0;padding:1.5rem 1.2rem 3rem}
+  .grid-2{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+<div class="layout">
+
+<!-- ══════════════════════════════════════════════════════════ SIDEBAR -->
+<nav class="sidebar">
+  <div class="sidebar-logo">
+    <div class="name"><div class="logo-dot"></div>Plots Auth</div>
+    <div class="sub">Auth &amp; Authorization Reference</div>
+  </div>
+
+  <div class="nav-group">
+    <span class="nav-group-label">Introduction</span>
+    <a href="#overview" class="nav-link"><div class="dot dot-auth"></div>Overview</a>
+    <a href="#token-design" class="nav-link"><div class="dot dot-token"></div>Token Design</a>
+    <a href="#session-arch" class="nav-link"><div class="dot dot-token"></div>Session Architecture</a>
+  </div>
+
+  <div class="nav-group">
+    <span class="nav-group-label">Email / Password</span>
+    <a href="#register" class="nav-link"><div class="dot dot-auth"></div>Registration</a>
+    <a href="#login" class="nav-link"><div class="dot dot-auth"></div>Login</a>
+    <a href="#refresh" class="nav-link"><div class="dot dot-token"></div>Token Refresh</a>
+    <a href="#logout" class="nav-link"><div class="dot dot-auth"></div>Logout</a>
+    <a href="#forgot-password" class="nav-link"><div class="dot dot-auth"></div>Forgot Password</a>
+    <a href="#reset-password" class="nav-link"><div class="dot dot-auth"></div>Reset Password</a>
+    <a href="#change-password" class="nav-link"><div class="dot dot-auth"></div>Change Password</a>
+  </div>
+
+  <div class="nav-group">
+    <span class="nav-group-label">SSO / OAuth</span>
+    <a href="#sso-google" class="nav-link"><div class="dot dot-sso"></div>Google OAuth</a>
+    <a href="#sso-azure" class="nav-link"><div class="dot dot-sso"></div>Azure AD OAuth</a>
+  </div>
+
+  <div class="nav-group">
+    <span class="nav-group-label">RBAC</span>
+    <a href="#roles" class="nav-link"><div class="dot dot-rbac"></div>Roles</a>
+    <a href="#permissions" class="nav-link"><div class="dot dot-rbac"></div>Permissions</a>
+  </div>
+
+  <div class="nav-group">
+    <span class="nav-group-label">Infrastructure</span>
+    <a href="#middleware" class="nav-link"><div class="dot dot-gw"></div>Gateway Middleware</a>
+    <a href="#frontend" class="nav-link"><div class="dot dot-fe"></div>Frontend Token Flow</a>
+  </div>
+
+  <div class="nav-group" style="margin-top:1rem">
+    <span class="nav-group-label">Other Docs</span>
+    <a href="index.html" class="nav-link"><div class="dot dot-gw"></div>Architecture</a>
+    <a href="deployment.html" class="nav-link"><div class="dot dot-gw"></div>Deployment</a>
+  </div>
+</nav>
+
+<!-- ══════════════════════════════════════════════════════════ MAIN -->
+<main class="main">
+
+<!-- ── Overview ─────────────────────────────────────── -->
+<section id="overview">
+  <div style="margin-bottom:1.5rem">
+    <div style="font-size:.78rem;color:var(--text-muted);text-transform:uppercase;letter-spacing:.1em;margin-bottom:.4rem">Plots Platform</div>
+    <h1>Authentication &amp; Authorization</h1>
+    <p style="font-size:1rem;color:var(--text);margin-top:.6rem;max-width:62ch">
+      Complete reference for how users register, log in, refresh tokens, reset passwords, authenticate via SSO, and how the API Gateway enforces role-based permissions on every request.
+    </p>
+  </div>
+
+  <h2>Endpoint Reference</h2>
+  <p>All auth routes live in <code>auth-service</code> and are proxied through the API Gateway at <code>http://api-gateway:8000</code>.</p>
+
+  <table class="endpoint-table">
+    <thead>
+      <tr><th>Method</th><th>Path</th><th>Auth</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><span class="badge badge-post">POST</span></td><td><code>/api/auth/register</code></td><td><span class="badge-public badge">public</span></td><td>Create account, returns tokens + user</td></tr>
+      <tr><td><span class="badge badge-post">POST</span></td><td><code>/api/auth/login</code></td><td><span class="badge-public badge">public</span></td><td>Email/password login, returns tokens + user</td></tr>
+      <tr><td><span class="badge badge-post">POST</span></td><td><code>/api/auth/refresh</code></td><td><span class="badge-public badge">public</span></td><td>Rotate tokens using refresh_token</td></tr>
+      <tr><td><span class="badge badge-post">POST</span></td><td><code>/api/auth/logout</code></td><td><span class="badge-auth badge">auth</span></td><td>Revoke current session</td></tr>
+      <tr><td><span class="badge badge-post">POST</span></td><td><code>/api/auth/forgot-password</code></td><td><span class="badge-public badge">public</span></td><td>Request password reset email</td></tr>
+      <tr><td><span class="badge badge-post">POST</span></td><td><code>/api/auth/reset-password</code></td><td><span class="badge-public badge">public</span></td><td>Confirm reset with token + new password</td></tr>
+      <tr><td><span class="badge badge-post">POST</span></td><td><code>/api/auth/change-password</code></td><td><span class="badge-auth badge">auth</span></td><td>Change password (requires current password)</td></tr>
+      <tr><td><span class="badge badge-get">GET</span></td><td><code>/api/auth/google</code></td><td><span class="badge-public badge">public</span></td><td>Redirect to Google consent screen</td></tr>
+      <tr><td><span class="badge badge-get">GET</span></td><td><code>/api/auth/google/callback</code></td><td><span class="badge-public badge">public</span></td><td>Google OAuth callback, issues tokens</td></tr>
+      <tr><td><span class="badge badge-get">GET</span></td><td><code>/api/auth/azure</code></td><td><span class="badge-public badge">public</span></td><td>Redirect to Azure AD consent screen</td></tr>
+      <tr><td><span class="badge badge-get">GET</span></td><td><code>/api/auth/azure/callback</code></td><td><span class="badge-public badge">public</span></td><td>Azure AD OAuth callback, issues tokens</td></tr>
+      <tr><td><span class="badge badge-get">GET</span></td><td><code>/api/profile/me</code></td><td><span class="badge-auth badge">auth</span></td><td>Current user's profile + role</td></tr>
+      <tr><td><span class="badge badge-patch">PATCH</span></td><td><code>/api/profile/me</code></td><td><span class="badge-auth badge">auth</span></td><td>Update profile fields</td></tr>
+      <tr><td><span class="badge badge-get">GET</span></td><td><code>/api/auth/roles</code></td><td><span class="badge-auth badge">auth</span></td><td>List all roles with permissions</td></tr>
+      <tr><td><span class="badge badge-get">GET</span></td><td><code>/api/auth/permissions</code></td><td><span class="badge-auth badge">auth</span></td><td>List all permission codes</td></tr>
+    </tbody>
+  </table>
+
+  <div class="callout callout-info">
+    <div class="callout-title">Public vs Protected</div>
+    Public paths bypass JWT validation entirely — they are whitelisted in <code>middleware.py</code> under <code>_PUBLIC_PATHS</code>. All other paths require a valid <code>access_token</code> cookie or <code>Authorization: Bearer &lt;token&gt;</code> header. Missing token → <strong>401</strong>. Valid token but insufficient permission → <strong>403</strong>.
+  </div>
+</section>
+
+<!-- ── Token Design ─────────────────────────────────── -->
+<section id="token-design">
+  <h2>Token Design</h2>
+  <p>Two JWTs are issued on every successful auth event. Both are HS256-signed with <code>AUTH_SECRET_KEY</code> and stored as <strong>httpOnly cookies</strong> so JavaScript cannot read them directly.</p>
+
+  <div class="grid-2">
+    <div class="card">
+      <h3>Access Token</h3>
+      <div class="token-field">
+        <div class="tf-key">type</div><div class="tf-val"><code>"access"</code></div>
+        <div class="tf-key">sub</div><div class="tf-val">User UUID (string)</div>
+        <div class="tf-key">role</div><div class="tf-val">Role <code>short_name</code> e.g. <code>"member"</code></div>
+        <div class="tf-key">exp</div><div class="tf-val">30 minutes from issuance</div>
+        <div class="tf-key">Cookie</div><div class="tf-val"><code>access_token</code> · httpOnly · maxAge 1800s</div>
+      </div>
+    </div>
+    <div class="card">
+      <h3>Refresh Token</h3>
+      <div class="token-field">
+        <div class="tf-key">type</div><div class="tf-val"><code>"refresh"</code></div>
+        <div class="tf-key">sub</div><div class="tf-val">User UUID (string)</div>
+        <div class="tf-key">role</div><div class="tf-val">Role <code>short_name</code></div>
+        <div class="tf-key">exp</div><div class="tf-val">7 days from issuance</div>
+        <div class="tf-key">Cookie</div><div class="tf-val"><code>refresh_token</code> · httpOnly · maxAge 604800s</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="callout callout-warn">
+    <div class="callout-title">Role stored as short_name, not name</div>
+    The JWT <code>role</code> claim stores the <code>Roles.short_name</code> field (e.g. <code>"member"</code>, <code>"admin"</code>) — not the display <code>Roles.name</code> (e.g. <code>"Member"</code>). The gateway uses this value to look up permissions via <code>/api/auth/internal/role-permissions</code>, which queries <code>WHERE Roles.short_name = ?</code>.
+  </div>
+
+  <h3>Cookie Options</h3>
+  <table class="endpoint-table">
+    <thead><tr><th>Attribute</th><th>Value</th><th>Why</th></tr></thead>
+    <tbody>
+      <tr><td><code>HttpOnly</code></td><td>true</td><td>JavaScript cannot read the token — prevents XSS token theft</td></tr>
+      <tr><td><code>SameSite</code></td><td>Lax</td><td>Sent on top-level navigation + same-site requests; blocks CSRF from cross-site POSTs</td></tr>
+      <tr><td><code>Secure</code></td><td>true in production</td><td>HTTPS only in prod; omitted in local dev for <code>http://localhost</code></td></tr>
+      <tr><td><code>Path</code></td><td>/</td><td>Sent on every request to the domain</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ── Session Architecture ─────────────────────────── -->
+<section id="session-arch">
+  <h2>Session Architecture</h2>
+  <p>
+    The auth-service maintains a <code>sessions</code> table in PostgreSQL. Tokens are never stored raw — only their <strong>SHA-256 hashes</strong> are persisted. This means a stolen token dump cannot be directly replayed.
+  </p>
+
+  <div class="token-field" style="margin-bottom:1rem">
+    <div class="tf-key">access_token_hash</div><div class="tf-val">SHA-256 of the access JWT</div>
+    <div class="tf-key">refresh_token_hash</div><div class="tf-val">SHA-256 of the refresh JWT (unique index)</div>
+    <div class="tf-key">expires_at</div><div class="tf-val">Created + 7 days (session lifetime, not token lifetime)</div>
+    <div class="tf-key">revoked_at</div><div class="tf-val">NULL while active; timestamped when revoked (logout, refresh rotation, password change)</div>
+    <div class="tf-key">ip_address</div><div class="tf-val">Client IP at session creation</div>
+    <div class="tf-key">device_type</div><div class="tf-val"><code>"web"</code> / <code>"mobile"</code> / <code>"tablet"</code> (parsed from User-Agent)</div>
+  </div>
+
+  <div class="callout callout-info">
+    <div class="callout-title">One active session per user</div>
+    A partial unique index <code>uq_active_session_per_user</code> on <code>(user_id)</code> <code>WHERE revoked_at IS NULL</code> enforces that each user has at most one live session at a time. Logging in while already logged in revokes the old session first.
+  </div>
+
+  <h3>Session Validation (Two-layer)</h3>
+  <p>On every protected request the gateway validates the session in two steps:</p>
+  <div class="flow">
+    <div class="flow-step">
+      <div class="step-num">1</div>
+      <div class="step-body"><strong>Redis cache check</strong><p>Key <code>session:&lt;token_hash&gt;</code>. If cached <code>"1"</code> (valid) or <code>"0"</code> (invalid), return immediately. TTL is 60 seconds — avoids a DB round-trip on every request.</p></div>
+    </div>
+    <div class="flow-step">
+      <div class="step-num">2</div>
+      <div class="step-body"><strong>Auth-service fallback</strong><p>Cache miss → POST <code>/api/auth/internal/validate-session</code> with <code>{ token_hash }</code>. Checks <code>Sessions</code> table: <code>access_token_hash = ?</code> AND <code>revoked_at IS NULL</code> AND <code>expires_at &gt; now</code>. Result is cached for 60 s.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- ── Registration ─────────────────────────────────── -->
+<section id="register">
+  <h2>Registration</h2>
+
+  <div class="tag-row">
+    <span class="tag tag-blue">POST /api/auth/register</span>
+    <span class="tag tag-green">public</span>
+    <span class="tag tag-amber">AUTH_EMAIL_ENABLED=true required</span>
+  </div>
+
+  <pre>{
+  "email": "alice@example.com",
+  "password": "SecurePass123!",
+  "fname": "Alice",        // optional
+  "lname": "Smith"         // optional
+}</pre>
+
+  <div class="flow">
+    <div class="flow-step">
+      <div class="step-num">1</div>
+      <div class="step-body"><strong>Duplicate check</strong><p>Query <code>users</code> WHERE <code>email = ?</code> AND <code>is_deleted = false</code>. Raises <strong>409 Conflict</strong> if found.</p></div>
+    </div>
+    <div class="flow-step">
+      <div class="step-num">2</div>
+      <div class="step-body"><strong>Assign default role</strong><p>Fetches the role with <code>short_name = "member"</code> and sets <code>user.role_id</code>. If no such role exists in the DB (unseeded), <code>role_id</code> is NULL — user gets no permissions until seeded.</p></div>
+    </div>
+    <div class="flow-step">
+      <div class="step-num">3</div>
+      <div class="step-body"><strong>Create user + profile</strong><p>Password is hashed with bcrypt (<code>hash_password()</code>). A linked <code>Profiles</code> row is created with <code>fname</code>/<code>lname</code>.</p></div>
+    </div>
+    <div class="flow-step">
+      <div class="step-num">4</div>
+      <div class="step-body"><strong>Issue tokens</strong><p><code>_build_tokens(user)</code> reads <code>user.role.short_name</code> for the JWT <code>role</code> claim. Both a 30-min access token and 7-day refresh token are created.</p></div>
+    </div>
+    <div class="flow-step">
+      <div class="step-num">5</div>
+      <div class="step-body"><strong>Create session</strong><p>Inserts into <code>sessions</code>: both token hashes, <code>expires_at = now + 7 days</code>, client IP, device type.</p></div>
+    </div>
+    <div class="flow-step">
+      <div class="step-num">6</div>
+      <div class="step-body"><strong>Set cookies + return</strong><p>Backend sets <code>Set-Cookie: access_token=…; refresh_token=…</code> on the response. Frontend server action also calls <code>cookies().set()</code> to ensure httpOnly cookies are stored. Returns <code>{ user, tokens }</code>.</p></div>
+    </div>
+  </div>
+
+  <h4>Success Response</h4>
+  <pre>{
+  "success": true,
+  "data": {
+    "user": { "id": "uuid", "email": "alice@example.com", "role": { "short_name": "member" }, ... },
+    "tokens": { "access_token": "eyJ...", "refresh_token": "eyJ..." }
+  }
+}</pre>
+</section>
+
+<!-- ── Login ──────────────────────────────────────────── -->
+<section id="login">
+  <h2>Login</h2>
+
+  <div class="tag-row">
+    <span class="tag tag-blue">POST /api/auth/login</span>
+    <span class="tag tag-green">public</span>
+    <span class="tag tag-amber">AUTH_EMAIL_ENABLED=true required</span>
+  </div>
+
+  <pre>{
+  "email": "alice@example.com",
+  "password": "SecurePass123!"
+}</pre>
+
+  <div class="flow">
+    <div class="flow-step">
+      <div class="step-num">1</div>
+      <div class="step-body"><strong>User lookup + password verify</strong><p>Fetches user by email. Verifies bcrypt hash. Returns <strong>401</strong> for either wrong email or wrong password (same error message — no enumeration).</p></div>
+    </div>
+    <div class="flow-step">
+      <div class="step-num">2</div>
+      <div class="step-body"><strong>Active check</strong><p>If <code>user.is_active = false</code>, raises <strong>401 "Account is deactivated"</strong>.</p></div>
+    </div>
+    <div class="flow-step">
+      <div class="step-num">3</div>
+      <div class="step-body"><strong>Revoke previous session</strong><p>Finds any session with <code>user_id = ? AND revoked_at IS NULL</code> and sets <code>revoked_at = now()</code>. Enforces single-session policy.</p></div>
+    </div>
+    <div class="flow-step">
+      <div class="step-num">4</div>
+      <div class="step-body"><strong>Update last_login</strong><p>Sets <code>user.last_login = now()</code> for audit purposes.</p></div>
+    </div>
+    <div class="flow-step">
+      <div class="step-num">5</div>
+      <div class="step-body"><strong>Issue tokens + create session</strong><p>Same as registration steps 4–6. New session row inserted with fresh token hashes.</p></div>
+    </div>
+  </div>
+
+  <div class="callout callout-tip">
+    <div class="callout-title">Device type detection</div>
+    The <code>User-Agent</code> header is parsed to categorize the device as <code>"mobile"</code>, <code>"tablet"</code>, or <code>"web"</code>. This is stored on the session row for future session management features.
+  </div>
+</section>
+
+<!-- ── Token Refresh ──────────────────────────────────── -->
+<section id="refresh">
+  <h2>Token Refresh</h2>
+
+  <div class="tag-row">
+    <span class="tag tag-blue">POST /api/auth/refresh</span>
+    <span class="tag tag-green">public</span>
+    <span class="tag tag-purple">token rotation — old refresh_token is revoked</span>
+  </div>
+
+  <p>Accepts the refresh token in <strong>either</strong> the JSON body (server-to-server) or the <code>refresh_token</code> cookie (browser requests):</p>
+
+  <pre>// Server-to-server (Next.js server action)
+POST /api/auth/refresh
+Content-Type: application/json
+{ "refresh_token": "eyJ..." }
+
+// Browser (credentials: 'include' — reads httpOnly cookie automatically)
+POST /api/auth/refresh
+// No body needed — backend reads request.cookies.get("refresh_token")</pre>
+
+  <div class="flow">
+    <div class="flow-step">
+      <div class="step-num">1</div>
+      <div class="step-body"><strong>Extract refresh token</strong><p>Tries JSON body first (<code>body.get("refresh_token")</code>). Falls back to <code>request.cookies.get("refresh_token")</code>. Returns <strong>401</strong> if neither provides a token.</p></div>
+    </div>
+    <div class="flow-step">
+      <div class="step-num">2</div>
+      <div class="step-body"><strong>Decode &amp; type-check JWT</strong><p>Decodes the token. If signature is invalid, expired, or <code>type != "refresh"</code>, raises <strong>401 "Invalid refresh token"</strong>.</p></div>
+    </div>
+    <div class="flow-step">
+      <div class="step-num">3</div>
+      <div class="step-body"><strong>Session lookup</strong><p>Queries <code>sessions WHERE refresh_token_hash = SHA256(token) AND revoked_at IS NULL</code>. Also checks <code>session.is_valid</code> (not expired). Returns <strong>401 "Session expired or revoked"</strong> if not found.</p></div>
+    </div>
+    <div class="flow-step">
+      <div class="step-num">4</div>
+      <div class="step-body"><strong>Revoke old session</strong><p>Sets <code>session.revoked_at = now()</code> — the old session is immediately dead. Any concurrent requests using the old access token will fail session validation within 60 s (Redis TTL).</p></div>
+    </div>
+    <div class="flow-step">
+      <div class="step-num">5</div>
+      <div class="step-body"><strong>Issue new tokens + new session</strong><p>Both a new access token and a new refresh token are generated. A new session row is inserted with fresh hashes. Old IP and device_type are carried over.</p></div>
+    </div>
+    <div class="flow-step">
+      <div class="step-num">6</div>
+      <div class="step-body"><strong>Set cookies + return both tokens</strong><p>Backend response includes <code>Set-Cookie</code> for both. Frontend server action calls <code>cookies().set()</code> for both <code>access_token</code> (maxAge 1800s) and <code>refresh_token</code> (maxAge 604800s) so the browser receives updated cookies.</p></div>
+    </div>
+  </div>
+
+  <div class="callout callout-danger">
+    <div class="callout-title">Token Rotation — both cookies must be updated</div>
+    The backend revokes the old <code>refresh_token</code> on every refresh call and issues a brand-new one. If only the <code>access_token</code> cookie is updated but not the <code>refresh_token</code> cookie, the next refresh attempt sends the now-revoked old token and returns <strong>401</strong> — effectively logging the user out. The frontend's <code>refreshServerToken()</code> persists <em>both</em> new tokens.
+  </div>
+
+  <h3>Frontend Refresh Mutex</h3>
+  <p>If five concurrent server actions all receive a 401 simultaneously, only one call to <code>/api/auth/refresh</code> must be made. The <code>_refreshInFlight</code> Map in <code>server-api.ts</code> implements a server-side mutex keyed by the current <code>refresh_token</code> value:</p>
+  <pre>// Simplified logic in server-api.ts
+const existing = _refreshInFlight.get(refreshToken)
+if (existing) return existing           // reuse in-flight promise
+
+const promise = doRefresh()             // single HTTP call
+_refreshInFlight.set(refreshToken, promise)
+promise.finally(() => _refreshInFlight.delete(refreshToken))
+return promise                          // all 5 callers await the same promise</pre>
+</section>
+
+<!-- ── Logout ─────────────────────────────────────────── -->
+<section id="logout">
+  <h2>Logout</h2>
+
+  <div class="tag-row">
+    <span class="tag tag-blue">POST /api/auth/logout</span>
+    <span class="tag tag-purple">auth required</span>
+  </div>
+
+  <div class="flow">
+    <div class="flow-step">
+      <div class="step-num">1</div>
+      <div class="step-body"><strong>Identify user</strong><p>Gateway decodes the access token and sets <code>request.state.user_id</code>. The <code>get_current_user</code> dependency fetches the user from the DB.</p></div>
+    </div>
+    <div class="flow-step">
+      <div class="step-num">2</div>
+      <div class="step-body"><strong>Revoke active session</strong><p><code>logout_user(user_id)</code> sets <code>revoked_at = now()</code> on the user's active session. Subsequent requests with the old access token will fail session validation within 60 s.</p></div>
+    </div>
+    <div class="flow-step">
+      <div class="step-num">3</div>
+      <div class="step-body"><strong>Clear cookies</strong><p>Backend sets <code>Set-Cookie: access_token=; Max-Age=0; refresh_token=; Max-Age=0</code>. Frontend server action also calls <code>cookies().delete()</code> for both.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- ── Forgot Password ───────────────────────────────── -->
+<section id="forgot-password">
+  <h2>Forgot Password</h2>
+
+  <div class="tag-row">
+    <span class="tag tag-blue">POST /api/auth/forgot-password</span>
+    <span class="tag tag-green">public</span>
+    <span class="tag tag-amber">AUTH_EMAIL_ENABLED=true required</span>
+  </div>
+
+  <pre>{ "email": "alice@example.com" }</pre>
+
+  <div class="flow">
+    <div class="flow-step">
+      <div class="step-num">1</div>
+      <div class="step-body"><strong>Silent user lookup</strong><p>Queries for the email. If no user exists, the response is identical to success — <strong>no email enumeration</strong>.</p></div>
+    </div>
+    <div class="flow-step">
+      <div class="step-num">2</div>
+      <div class="step-body"><strong>Generate reset token</strong><p><code>generate_reset_token()</code> creates a cryptographically random raw token. Its SHA-256 hash is stored in <code>password_reset_tokens</code> with <code>expires_at = now + 1 hour</code>.</p></div>
+    </div>
+    <div class="flow-step">
+      <div class="step-num">3</div>
+      <div class="step-body"><strong>Send email</strong><p>Calls the notification service with the reset URL: <code>{FRONTEND_URL}/reset-password?token={raw_token}</code>. Uses the <code>password_reset</code> email template.</p></div>
+    </div>
+    <div class="flow-step">
+      <div class="step-num">4</div>
+      <div class="step-body"><strong>Debug mode</strong><p>If <code>settings.debug = true</code>, the <code>reset_url</code> is returned in the response body so it can be used without a real email server during development.</p></div>
+    </div>
+  </div>
+
+  <div class="callout callout-info">
+    <div class="callout-title">Reset token storage</div>
+    Only the <strong>hash</strong> of the reset token is stored in the database (<code>hash_reset_token()</code> — a dedicated hash function separate from <code>hash_token()</code>). The raw token travels only through the email link, never persisted in plain text.
+  </div>
+</section>
+
+<!-- ── Reset Password ────────────────────────────────── -->
+<section id="reset-password">
+  <h2>Reset Password</h2>
+
+  <div class="tag-row">
+    <span class="tag tag-blue">POST /api/auth/reset-password</span>
+    <span class="tag tag-green">public</span>
+  </div>
+
+  <pre>{ "token": "&lt;raw token from email link&gt;", "new_password": "NewPass456!" }</pre>
+
+  <div class="flow">
+    <div class="flow-step">
+      <div class="step-num">1</div>
+      <div class="step-body"><strong>Token lookup</strong><p>Hashes the raw token (<code>hash_reset_token(raw_token)</code>) and queries <code>password_reset_tokens WHERE token_hash = ? AND is_used = false AND is_deleted = false</code>. Returns <strong>422</strong> if not found.</p></div>
+    </div>
+    <div class="flow-step">
+      <div class="step-num">2</div>
+      <div class="step-body"><strong>Expiry check</strong><p>If <code>expires_at &lt; now()</code>, raises <strong>422 "Reset token has expired"</strong>.</p></div>
+    </div>
+    <div class="flow-step">
+      <div class="step-num">3</div>
+      <div class="step-body"><strong>Update password</strong><p>Sets <code>user.hashed_password = hash_password(new_password)</code>.</p></div>
+    </div>
+    <div class="flow-step">
+      <div class="step-num">4</div>
+      <div class="step-body"><strong>Revoke session + mark used</strong><p>Sets <code>reset.is_used = true</code> (one-time use). Revokes the user's active session — forcing re-login with the new password.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- ── Change Password ───────────────────────────────── -->
+<section id="change-password">
+  <h2>Change Password</h2>
+
+  <div class="tag-row">
+    <span class="tag tag-blue">POST /api/auth/change-password</span>
+    <span class="tag tag-purple">auth required</span>
+    <span class="tag tag-amber">AUTH_EMAIL_ENABLED=true required</span>
+  </div>
+
+  <pre>{ "current_password": "OldPass123!", "new_password": "NewPass456!" }</pre>
+
+  <p>Verifies the current password first. If correct, hashes the new password and saves it. The active session is revoked — the user must log in again (or the frontend can immediately call <code>/api/auth/login</code> with the new password).</p>
+</section>
+
+<!-- ── SSO: Google ───────────────────────────────────── -->
+<section id="sso-google">
+  <h2>SSO — Google OAuth 2.0</h2>
+
+  <div class="tag-row">
+    <span class="tag tag-green">GET /api/auth/google</span>
+    <span class="tag tag-green">GET /api/auth/google/callback</span>
+    <span class="tag tag-amber">AUTH_GOOGLE_ENABLED=true required</span>
+  </div>
+
+  <div class="flow">
+    <div class="flow-step">
+      <div class="step-num">1</div>
+      <div class="step-body"><strong>Initiate</strong><p>Browser visits <code>GET /api/auth/google</code>. <code>GoogleAuthService.generate_auth_url()</code> builds a Google OAuth2 consent URL with the configured <code>GOOGLE_CLIENT_ID</code> and <code>GOOGLE_OAUTH_REDIRECT_URI</code>. Browser is redirected to Google.</p></div>
+    </div>
+    <div class="flow-step">
+      <div class="step-num">2</div>
+      <div class="step-body"><strong>User consents on Google</strong><p>User approves the requested scopes (email, profile). Google redirects to <code>GOOGLE_OAUTH_REDIRECT_URI</code> with <code>?code=AUTH_CODE&amp;state=…</code>.</p></div>
+    </div>
+    <div class="flow-step">
+      <div class="step-num">3</div>
+      <div class="step-body"><strong>Callback: exchange code</strong><p><code>GET /api/auth/google/callback?code=…</code> — <code>GoogleAuthService.authenticate_with_google(code, ip)</code> exchanges the auth code for an access + refresh token from Google's token endpoint.</p></div>
+    </div>
+    <div class="flow-step">
+      <div class="step-num">4</div>
+      <div class="step-body"><strong>Fetch user info from Google</strong><p>Uses the Google access token to fetch the user's <code>id</code>, <code>email</code>, <code>name</code> from Google's userinfo endpoint.</p></div>
+    </div>
+    <div class="flow-step">
+      <div class="step-num">5</div>
+      <div class="step-body"><strong>Upsert user in DB</strong><p>If <code>google_id</code> exists in DB → link existing account. If email matches → link Google to existing account. Otherwise → create new user with <code>auth_source = "google"</code>, <code>is_verified = true</code> (email verified by Google), <code>hashed_password = NULL</code>.</p></div>
+    </div>
+    <div class="flow-step">
+      <div class="step-num">6</div>
+      <div class="step-body"><strong>Issue tokens, redirect to dashboard</strong><p>Same token issuance flow as email login. Backend sets auth cookies on a <code>302 → /dashboard</code> redirect response.</p></div>
+    </div>
+  </div>
+
+  <div class="callout callout-warn">
+    <div class="callout-title">hashed_password is NULL for pure SSO users</div>
+    Users created via Google have <code>hashed_password = NULL</code>. They cannot log in via email/password and must use the SSO flow. To allow both methods, users can set a password via Change Password after linking.
+  </div>
+</section>
+
+<!-- ── SSO: Azure ────────────────────────────────────── -->
+<section id="sso-azure">
+  <h2>SSO — Azure AD OAuth 2.0</h2>
+
+  <div class="tag-row">
+    <span class="tag tag-green">GET /api/auth/azure</span>
+    <span class="tag tag-green">GET /api/auth/azure/callback</span>
+    <span class="tag tag-amber">AUTH_AZURE_ENABLED=true required</span>
+  </div>
+
+  <p>Identical flow to Google OAuth but uses Azure AD endpoints. Configured via <code>AZURE_CLIENT_ID</code>, <code>AZURE_CLIENT_SECRET</code>, <code>AZURE_TENANT_ID</code> (default <code>"common"</code> for multi-tenant), and <code>AZURE_OAUTH_REDIRECT_URI</code>.</p>
+  <p>User model stores <code>azure_id</code> and <code>azure_refresh_token</code> for account linking. <code>auth_source</code> is set to <code>"azure"</code> for newly created Azure users.</p>
+
+  <h3>Link / Unlink</h3>
+  <table class="endpoint-table">
+    <thead><tr><th>Method</th><th>Path</th><th>Description</th></tr></thead>
+    <tbody>
+      <tr><td><span class="badge badge-get">GET</span></td><td><code>/api/auth/google/status</code></td><td>Returns whether Google is linked to the current account</td></tr>
+      <tr><td><span class="badge badge-delete">DELETE</span></td><td><code>/api/auth/google/unlink</code></td><td>Removes Google link (clears <code>google_id</code> / <code>google_refresh_token</code>)</td></tr>
+      <tr><td><span class="badge badge-get">GET</span></td><td><code>/api/auth/azure/status</code></td><td>Returns whether Azure AD is linked to the current account</td></tr>
+      <tr><td><span class="badge badge-delete">DELETE</span></td><td><code>/api/auth/azure/unlink</code></td><td>Removes Azure link</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ── Roles ─────────────────────────────────────────── -->
+<section id="roles">
+  <h2>Roles</h2>
+  <p>Roles are the bridge between users and permissions. Each user has at most one role (<code>users.role_id</code> FK). Roles are seeded in the database and managed via the roles API.</p>
+
+  <h3>Role Model</h3>
+  <div class="token-field">
+    <div class="tf-key">id</div><div class="tf-val">UUID (primary key)</div>
+    <div class="tf-key">name</div><div class="tf-val">Display name, e.g. <code>"Member"</code>, <code>"Admin"</code></div>
+    <div class="tf-key">short_name</div><div class="tf-val">Machine-readable slug stored in JWT, e.g. <code>"member"</code>, <code>"admin"</code>, <code>"superadmin"</code></div>
+    <div class="tf-key">description</div><div class="tf-val">Human description of the role</div>
+    <div class="tf-key">role_permissions</div><div class="tf-val">M:N relationship → <code>role_permissions</code> join table</div>
+  </div>
+
+  <div class="callout callout-info">
+    <div class="callout-title">superadmin wildcard</div>
+    The role with <code>short_name = "superadmin"</code> is resolved locally in the gateway — it always receives <code>frozenset({"*"})</code> without a DB round-trip. The wildcard <code>"*"</code> passes every <code>require_permission()</code> check.
+  </div>
+
+  <h3>Role Assignment API</h3>
+  <table class="endpoint-table">
+    <thead><tr><th>Method</th><th>Path</th><th>Description</th></tr></thead>
+    <tbody>
+      <tr><td><span class="badge badge-get">GET</span></td><td><code>/api/auth/roles</code></td><td>List all roles with their permissions</td></tr>
+      <tr><td><span class="badge badge-post">POST</span></td><td><code>/api/auth/roles</code></td><td>Create a new role</td></tr>
+      <tr><td><span class="badge badge-patch">PATCH</span></td><td><code>/api/auth/roles/{id}</code></td><td>Update name / short_name / description</td></tr>
+      <tr><td><span class="badge badge-delete">DELETE</span></td><td><code>/api/auth/roles/{id}</code></td><td>Soft-delete (fails if users still assigned)</td></tr>
+      <tr><td><span class="badge badge-post">POST</span></td><td><code>/api/auth/roles/{role_id}/assign/{user_id}</code></td><td>Assign role to a user</td></tr>
+      <tr><td><span class="badge badge-delete">DELETE</span></td><td><code>/api/auth/roles/unassign/{user_id}</code></td><td>Remove user's role</td></tr>
+    </tbody>
+  </table>
+
+  <div class="callout callout-warn">
+    <div class="callout-title">JWT role is cached in the token</div>
+    The <code>role</code> claim is baked into the JWT at login time. Changing a user's role in the DB does not affect live sessions — the user must log out and back in to receive a token with the new role. Redis permission cache TTL is 5 minutes (<code>_PERM_CACHE_TTL = 300</code>).
+  </div>
+</section>
+
+<!-- ── Permissions ───────────────────────────────────── -->
+<section id="permissions">
+  <h2>Permissions</h2>
+  <p>Permissions are fine-grained codes in the format <code>resource:action</code>. They are assigned to roles and enforced at the gateway router level.</p>
+
+  <h3>Permission Model</h3>
+  <div class="token-field">
+    <div class="tf-key">id</div><div class="tf-val">UUID</div>
+    <div class="tf-key">name</div><div class="tf-val">Display name e.g. <code>"Read Profile"</code></div>
+    <div class="tf-key">code</div><div class="tf-val">Unique machine code e.g. <code>"profile:read"</code></div>
+    <div class="tf-key">description</div><div class="tf-val">Optional description</div>
+  </div>
+
+  <h3>Code Format</h3>
+  <p>Wildcards are supported by the gateway's <code>require_permission()</code>:</p>
+  <table class="perm-table">
+    <thead><tr><th>Pattern</th><th>Meaning</th></tr></thead>
+    <tbody>
+      <tr><td><code>profile:read</code></td><td>Exact match — read profile specifically</td></tr>
+      <tr><td><code>profile:*</code></td><td>All actions on profile resource</td></tr>
+      <tr><td><code>*:read</code></td><td>Read on any resource</td></tr>
+      <tr><td><code>*</code> or <code>*:*</code></td><td>All permissions (superadmin)</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Example Permission Set — "member" role</h3>
+  <table class="perm-table">
+    <thead><tr><th>Code</th><th>Description</th></tr></thead>
+    <tbody>
+      <tr><td><code>profile:read</code></td><td>View own profile</td></tr>
+      <tr><td><code>profile:update</code></td><td>Edit own profile</td></tr>
+      <tr><td><code>plots:read</code></td><td>View plot sheets</td></tr>
+      <tr><td><code>plots:create</code></td><td>Create new plot sheets</td></tr>
+      <tr><td><code>plots:update</code></td><td>Edit owned plots</td></tr>
+      <tr><td><code>chat:read</code></td><td>Read chat messages</td></tr>
+      <tr><td><code>chat:write</code></td><td>Send messages</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Permission Assignment API</h3>
+  <table class="endpoint-table">
+    <thead><tr><th>Method</th><th>Path</th><th>Description</th></tr></thead>
+    <tbody>
+      <tr><td><span class="badge badge-get">GET</span></td><td><code>/api/auth/permissions</code></td><td>List all permissions (paginated)</td></tr>
+      <tr><td><span class="badge badge-post">POST</span></td><td><code>/api/auth/permissions</code></td><td>Create a new permission</td></tr>
+      <tr><td><span class="badge badge-post">POST</span></td><td><code>/api/auth/permissions/{perm_id}/assign/{role_id}</code></td><td>Assign permission to a role</td></tr>
+      <tr><td><span class="badge badge-delete">DELETE</span></td><td><code>/api/auth/permissions/{perm_id}/unassign/{role_id}</code></td><td>Remove permission from role</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ── Gateway Middleware ────────────────────────────── -->
+<section id="middleware">
+  <h2>Gateway Middleware</h2>
+  <p>
+    <code>SessionValidationMiddleware</code> in <code>services/api-gateway/app/middleware.py</code> runs on <strong>every inbound request</strong> before it reaches any route handler. It validates the token, populates request state, and fetches the user's permission set.
+  </p>
+
+  <h3>Decision Chain</h3>
+  <div class="mw-check">
+    <div class="mw-row pass">
+      <div class="mw-label">Public path?</div>
+      <div class="mw-content"><p>If the path is in <code>_PUBLIC_PATHS</code> (login, register, refresh, health…) or starts with a public prefix (<code>/api/auth/google</code>, <code>/api/auth/azure</code>, <code>/api/auth/internal/</code>) → <strong>skip all checks, call next()</strong>.</p></div>
+    </div>
+    <div class="mw-row step">
+      <div class="mw-label">Extract token</div>
+      <div class="mw-content"><p>Reads from <code>Authorization: Bearer &lt;token&gt;</code> header first, then falls back to the <code>access_token</code> cookie.</p></div>
+    </div>
+    <div class="mw-row fail">
+      <div class="mw-label">No token?</div>
+      <div class="mw-content"><p>Returns <strong>401 "Authentication required"</strong> for all non-public paths. This ensures the frontend's 401 handler triggers a token refresh attempt rather than receiving an ambiguous 403.</p></div>
+    </div>
+    <div class="mw-row step">
+      <div class="mw-label">Validate session</div>
+      <div class="mw-content"><p>SHA-256 hashes the token → checks Redis key <code>session:&lt;hash&gt;</code>. Cache miss → POST auth-service <code>/api/auth/internal/validate-session</code>. If <code>valid = false</code> → <strong>401 "Session expired or revoked"</strong>. Result cached for 60 s.</p></div>
+    </div>
+    <div class="mw-row fail">
+      <div class="mw-label">Session invalid?</div>
+      <div class="mw-content"><p><strong>401 "Session expired or revoked"</strong> — session was revoked (logout, refresh rotation, password change) or exceeded 7-day lifetime.</p></div>
+    </div>
+    <div class="mw-row step">
+      <div class="mw-label">Decode JWT</div>
+      <div class="mw-content"><p><code>jose.jwt.decode(token, secret_key, algorithms=["HS256"])</code>. Validates signature <em>and</em> the <code>exp</code> claim. Any <code>JWTError</code> (bad signature, expired, malformed) → <strong>401 "Invalid token"</strong>.</p></div>
+    </div>
+    <div class="mw-row step">
+      <div class="mw-label">Set request state</div>
+      <div class="mw-content"><p>Populates <code>request.state.user_id</code> (from <code>sub</code>), <code>request.state.user_payload</code> (full claims), <code>request.state.user_role</code> (from <code>role</code> claim).</p></div>
+    </div>
+    <div class="mw-row step">
+      <div class="mw-label">Fetch permissions</div>
+      <div class="mw-content"><p><code>_fetch_role_permissions(role_name)</code>: <code>superadmin</code> → inline <code>{"*"}</code>. Others: Redis key <code>perms:&lt;role&gt;</code> (5 min TTL) → auth-service <code>/api/auth/internal/role-permissions</code>. Result stored in <code>request.state.user_permissions: frozenset[str]</code>.</p></div>
+    </div>
+    <div class="mw-row pass">
+      <div class="mw-label">Route handler runs</div>
+      <div class="mw-content"><p>Route handlers that require a specific permission call <code>require_permission("profile:read")</code> from <code>dependencies.py</code>. This checks the frozenset against the code plus wildcards. If absent → <strong>403 "Missing permission: profile:read"</strong>.</p></div>
+    </div>
+  </div>
+
+  <h3>Public Path Whitelist</h3>
+  <pre>_PUBLIC_PATHS = {
+    "/api/auth/login",
+    "/api/auth/register",
+    "/api/auth/forgot-password",
+    "/api/auth/reset-password",
+    "/api/auth/refresh",
+    "/health",
+    "/health/ready",
+    "/docs", "/redoc", "/openapi.json",
+}
+_PUBLIC_PREFIXES = (
+    "/api/auth/google",
+    "/api/auth/azure",
+    "/api/auth/internal/",   # internal service-to-service calls
+)</pre>
+
+  <h3>Permission Check Logic</h3>
+  <pre># dependencies.py — require_permission("profile:read")
+perms: frozenset = getattr(request.state, "user_permissions", frozenset())
+
+if "*" in perms:           return  # superadmin — pass
+if permission in perms:    return  # exact match
+if "profile:*" in perms:  return  # resource wildcard
+if "*:read" in perms:     return  # action wildcard
+if "*:*" in perms:        return  # full wildcard
+
+raise HTTPException(403, "Missing permission: profile:read")</pre>
+
+  <div class="callout callout-tip">
+    <div class="callout-title">Redis caching reduces auth-service load</div>
+    With Redis running, permission lookups add ~0.5 ms (cache hit) instead of ~5–15 ms (auth-service HTTP call). Session validation similarly. If Redis is unavailable, the middleware falls through to HTTP — it does not fail open or closed.
+  </div>
+</section>
+
+<!-- ── Frontend Token Flow ───────────────────────────── -->
+<section id="frontend">
+  <h2>Frontend Token Flow</h2>
+  <p>The Next.js frontend uses server actions exclusively — no API calls from browser JavaScript. All token handling happens server-side.</p>
+
+  <h3>Login / Register</h3>
+  <p>
+    <code>loginAction()</code> and <code>registerAction()</code> in <code>lib/services/server/auth.ts</code> call the backend directly from the Next.js server. They extract <code>data.tokens</code> from the JSON response and call <code>cookies().set()</code> to write httpOnly cookies — bypassing the browser entirely. The browser never sees the raw token values.
+  </p>
+
+  <h3>Authenticated Requests</h3>
+  <p>
+    <code>serverFetch()</code> and <code>cqrsFetch()</code> in <code>lib/server-api.ts</code> read the <code>access_token</code> cookie on the server and forward it as <code>Cookie: access_token=…</code> in the request to the API Gateway.
+  </p>
+
+  <h3>Auto-Refresh on 401</h3>
+  <div class="flow">
+    <div class="flow-step">
+      <div class="step-num">1</div>
+      <div class="step-body"><strong>Server action gets 401</strong><p>Access token expired. The gateway returns 401 because the JWT <code>exp</code> has passed (signature decode raises <code>JWTError</code>).</p></div>
+    </div>
+    <div class="flow-step">
+      <div class="step-num">2</div>
+      <div class="step-body"><strong>Mutex check</strong><p><code>refreshServerToken()</code> reads the current <code>refresh_token</code> cookie. Checks <code>_refreshInFlight</code> Map — if another concurrent action already started a refresh for this token, the promise is reused. Prevents multiple simultaneous refreshes.</p></div>
+    </div>
+    <div class="flow-step">
+      <div class="step-num">3</div>
+      <div class="step-body"><strong>POST /api/auth/refresh</strong><p>Sends <code>{ "refresh_token": "&lt;value&gt;" }</code> in the JSON body to the backend via <code>BACKEND_INTERNAL_URL</code>.</p></div>
+    </div>
+    <div class="flow-step">
+      <div class="step-num">4</div>
+      <div class="step-body"><strong>Persist BOTH new tokens</strong><p>Extracts <code>body.data.access_token</code> and <code>body.data.refresh_token</code>. Both are persisted via <code>cookies().set()</code> — access_token with <code>maxAge: 1800</code>, refresh_token with <code>maxAge: 604800</code>. Critical because the backend rotates the refresh token on every refresh.</p></div>
+    </div>
+    <div class="flow-step">
+      <div class="step-num">5</div>
+      <div class="step-body"><strong>Retry original request</strong><p><code>serverFetch()</code> retries once with the new access token. The <code>_retryToken</code> parameter prevents infinite retry loops on a second 401.</p></div>
+    </div>
+    <div class="flow-step">
+      <div class="step-num">6</div>
+      <div class="step-body"><strong>Refresh failed → throw</strong><p>If <code>refreshServerToken()</code> returns null (refresh token expired or revoked), <code>serverFetch</code> throws <code>"Session expired. Please log in again."</code> which bubbles to the component.</p></div>
+    </div>
+  </div>
+
+  <div class="callout callout-warn">
+    <div class="callout-title">Why both cookies must be updated</div>
+    The backend performs refresh token rotation — it revokes the old <code>refresh_token</code> session and issues a completely new one. If the frontend only saves the new <code>access_token</code> but not the new <code>refresh_token</code>, the next refresh attempt (after another 30 min) will send the now-revoked old refresh token → backend returns 401 → user is logged out unexpectedly.
+  </div>
+
+  <h3>Key Files</h3>
+  <table class="endpoint-table">
+    <thead><tr><th>File</th><th>Role</th></tr></thead>
+    <tbody>
+      <tr><td><code>lib/server-api.ts</code></td><td><code>serverFetch</code>, <code>cqrsFetch</code>, refresh mutex, cookie persistence</td></tr>
+      <tr><td><code>lib/services/server/auth.ts</code></td><td>Login, register, logout, forgot/reset password server actions</td></tr>
+      <tr><td><code>lib/services/server/profile.ts</code></td><td><code>getMeAction()</code> — fetches current user from <code>/api/profile/me</code></td></tr>
+      <tr><td><code>context/auth-context.tsx</code></td><td>React context wrapping all auth state; calls server actions</td></tr>
+    </tbody>
+  </table>
+</section>
+
+</main>
+</div>
+
+<script>
+// Active nav highlight based on scroll position
+const sections = document.querySelectorAll('section[id]')
+const navLinks = document.querySelectorAll('.nav-link')
+
+function updateActive() {
+  let current = ''
+  sections.forEach(s => {
+    if (window.scrollY >= s.offsetTop - 120) current = s.id
+  })
+  navLinks.forEach(link => {
+    link.classList.toggle('active', link.getAttribute('href') === '#' + current)
+  })
+}
+
+window.addEventListener('scroll', updateActive, { passive: true })
+updateActive()
+</script>
+</body>
+</html>

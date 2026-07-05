@@ -9,7 +9,6 @@ from app.auth.schemas import (
     ForgotPasswordRequest,
     LoginRequest,
     LoginResponse,
-    RefreshRequest,
     RegisterRequest,
     RegisterResponse,
     ResetPasswordRequest,
@@ -75,11 +74,26 @@ async def login(body: LoginRequest, request: Request, response: Response, db: As
 
 
 @router.post("/refresh")
-async def refresh(body: RefreshRequest, response: Response, db: AsyncSession = Depends(get_db)):
+async def refresh(request: Request, response: Response, db: AsyncSession = Depends(get_db)):
+    # Accept refresh_token from JSON body (server-to-server calls)
+    # or from the httpOnly cookie (browser requests via credentials: 'include')
+    token: str | None = None
+    try:
+        body = await request.json()
+        token = body.get("refresh_token")
+    except Exception:
+        pass
+    if not token:
+        token = request.cookies.get("refresh_token")
+    if not token:
+        raise HTTPException(status_code=401, detail="No refresh token provided")
+
     svc = AuthService(db)
-    access_token, refresh_token = await svc.refresh_access_token(body.refresh_token)
-    set_auth_cookies(response, access_token, refresh_token)
-    return ResponseHandler.ok(data=AuthTokens(access_token=access_token, refresh_token=refresh_token).model_dump())
+    access_token, new_refresh = await svc.refresh_access_token(token)
+    set_auth_cookies(response, access_token, new_refresh)
+    return ResponseHandler.ok(
+        data=AuthTokens(access_token=access_token, refresh_token=new_refresh).model_dump()
+    )
 
 
 @router.post("/logout")

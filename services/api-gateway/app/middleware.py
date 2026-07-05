@@ -31,9 +31,6 @@ _PUBLIC_PATHS = frozenset(
 )
 _PUBLIC_PREFIXES = ("/api/auth/google", "/api/auth/azure", "/api/auth/internal/")
 
-# CQRS routes must have a valid token — 401 if missing
-_REQUIRE_AUTH_PREFIXES = ("/api/v1/",)
-
 # How long (seconds) role-permission sets are cached in Redis.
 _PERM_CACHE_TTL = 300  # 5 minutes
 
@@ -96,7 +93,8 @@ class SessionValidationMiddleware(BaseHTTPMiddleware):
     3. Decodes the JWT; populates request.state.user_id / user_payload / user_role /
        user_permissions (frozenset of permission codes fetched from auth-service and
        cached in Redis — never hardcoded here).
-    4. CQRS routes (/api/v1/*) require a token; other backend proxy routes do not.
+    4. All non-public paths require a token — 401 if missing so the client can
+       trigger a token refresh rather than receiving a misleading 403.
 
     Authorization (permission checks) is enforced at the router level via
     ``require_permission`` / ``require_permissions`` / ``require_role`` dependencies
@@ -169,9 +167,7 @@ class SessionValidationMiddleware(BaseHTTPMiddleware):
         token = self._extract_token(request)
 
         if not token:
-            if any(path.startswith(p) for p in _REQUIRE_AUTH_PREFIXES):
-                return self._unauthorized("Missing auth token")
-            return await call_next(request)
+            return self._unauthorized("Authentication required")
 
         if not await self._validate_session(request, token):
             return self._unauthorized("Session expired or revoked")

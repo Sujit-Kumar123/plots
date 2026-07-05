@@ -51,7 +51,7 @@ async def get_role_permissions(
         select(Permissions.code)
         .join(RolePermissions, RolePermissions.permission_id == Permissions.id)
         .join(Roles, Roles.id == RolePermissions.role_id)
-        .where(Roles.name == body.role_name)
+        .where(Roles.short_name == body.role_name)
     )
     codes = [row[0] for row in result.fetchall()]
     return {"permissions": codes}

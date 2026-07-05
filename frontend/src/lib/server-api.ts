@@ -51,18 +51,38 @@ async function refreshServerToken(): Promise<string | null> {
     try {
       const res = await fetch(`${BACKEND}/api/auth/refresh`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Cookie: `refresh_token=${refreshToken}`,
-        },
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ refresh_token: refreshToken }),
         cache: "no-store",
       })
       if (!res.ok) return null
 
-      // Prefer token in response body; fall back to Set-Cookie header
+      // Tokens are in the standard { success, data: { access_token, refresh_token } } envelope
       const body = await res.json().catch(() => null)
-      if (body?.access_token) return body.access_token as string
+      const newAccess: string | undefined = body?.data?.access_token
+      const newRefresh: string | undefined = body?.data?.refresh_token
 
+      // Persist the rotated refresh_token immediately. The backend revokes the old
+      // token on every rotation — if we don't update the cookie here, the next
+      // refresh attempt uses the now-revoked token and the user gets logged out.
+      if (newRefresh) {
+        try {
+          const cs = await cookies()
+          cs.set("refresh_token", newRefresh, {
+            httpOnly: true,
+            path: "/",
+            sameSite: "lax",
+            secure: process.env.NODE_ENV === "production",
+            maxAge: 7 * 24 * 60 * 60,
+          })
+        } catch {
+          // cookies().set() unavailable outside server actions / route handlers
+        }
+      }
+
+      if (newAccess) return newAccess
+
+      // Fallback: parse from Set-Cookie header
       const setCookie = res.headers.get("set-cookie") ?? ""
       const match = setCookie.match(/(?:^|,\s*)access_token=([^;,\s]+)/)
       return match?.[1] ?? null
@@ -110,6 +130,7 @@ async function persistNewToken(newToken: string) {
       path: "/",
       sameSite: "lax",
       secure: process.env.NODE_ENV === "production",
+      maxAge: 30 * 60,  // match JWT exp so the cookie expires with the token
     })
   } catch {
     // cookies().set() is only available inside server actions / route handlers

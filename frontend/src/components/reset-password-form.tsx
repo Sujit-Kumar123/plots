@@ -3,7 +3,7 @@
 import { useState } from "react"
 import { useSearchParams, useRouter } from "next/navigation"
 import { cn } from "@/lib/utils"
-import { resetPassword as authResetPassword } from "@/lib/services/client/auth"
+import { resetPasswordAction } from "@/lib/services/server/auth"
 import { Button } from "@/components/ui/button"
 import {
   Card,
@@ -48,7 +48,7 @@ export function ResetPasswordForm({
     setError("")
     setLoading(true)
     try {
-      await authResetPassword(token, password)
+      await resetPasswordAction(token, password)
       setSuccess(true)
       setTimeout(() => router.push("/login"), 2000)
     } catch (err) {
