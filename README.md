@@ -610,3 +610,27 @@ docker push $REGISTRY/plots/frontend:latest
 | chat-query | 3 | 30 | 60% | 75% |
 | plot-command | 3 | 20 | 70% | 80% |
 | plot-query | 3 | 30 | 60% | 75% |
+
+---
+
+## Troubleshooting
+
+### Kafka fails to start: `InconsistentClusterIdException`
+
+**Symptom:** `docker compose up` reports `dependency failed to start: container plots-kafka-1 is unhealthy`, and `docker logs plots-kafka-1` shows:
+
+```
+kafka.common.InconsistentClusterIdException: The Cluster ID <X> doesn't match stored clusterId Some(<Y>) in meta.properties.
+The broker is trying to join the wrong cluster. Configured zookeeper.connect may be wrong.
+```
+
+**Cause:** Kafka and Zookeeper each persist their cluster ID in separate Docker volumes (`dev_kafka_data`, `dev_zookeeper_data`). If one volume gets reset/recreated independently of the other (e.g. only the Zookeeper volume was pruned), Zookeeper generates a new cluster ID that no longer matches the one already stored in Kafka's `meta.properties`, and Kafka refuses to start.
+
+**Fix:** wipe both volumes together so they regenerate a fresh, matching cluster ID. Kafka topics are recreated automatically by the `kafka-init` service — no other data (Postgres, Redis) is affected.
+
+```bash
+docker compose -f docker-compose.dev.yml stop kafka zookeeper
+docker compose -f docker-compose.dev.yml rm -f kafka zookeeper
+docker volume rm plots_dev_kafka_data plots_dev_zookeeper_data
+docker compose -f docker-compose.dev.yml up -d
+```
