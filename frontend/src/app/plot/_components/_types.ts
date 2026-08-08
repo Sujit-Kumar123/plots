@@ -2,7 +2,7 @@ export type Tool =
   | "block" | "pencil" | "erase" | "select" | "none"
   | "line" | "circle" | "ellipse"
   | "vline" | "vcircle" | "vellipse"
-  | "wall" | "div" | "text";
+  | "wall" | "div" | "text" | "furniture";
 
 export interface BlockInfo {
   gx: number; gz: number;
@@ -31,5 +31,15 @@ export interface DivPanelInfo {
 export interface TextInfo {
   wx: number; wy: number; wz: number;
   text: string;
+  color: string;
+}
+
+export interface FurnitureInfo {
+  id: string;
+  catalogItemId: string;
+  name: string;
+  gx: number; gz: number; bottomY: number;
+  rotationY: number;
+  width: number; height: number; depth: number;
   color: string;
 }

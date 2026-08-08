@@ -6,7 +6,7 @@ metadata:
   labels:
     app: auth-service
 spec:
-  replicas: 2
+  replicas: 1
   selector:
     matchLabels:
       app: auth-service
@@ -19,7 +19,7 @@ spec:
         # Run alembic migrations before the service starts
         - name: db-migrate
           image: plots/auth-service:latest
-          imagePullPolicy: Always
+          imagePullPolicy: IfNotPresent
           command: ["uv", "run", "alembic", "upgrade", "head"]
           env:
             - name: POSTGRES_USER
@@ -37,7 +37,7 @@ spec:
       containers:
         - name: auth-service
           image: plots/auth-service:latest
-          imagePullPolicy: Always
+          imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8010
           envFrom:

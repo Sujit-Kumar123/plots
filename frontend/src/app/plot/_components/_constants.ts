@@ -79,6 +79,11 @@ export const CURSORS: Record<string, string> = {
     `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32"><rect x="5" y="5" width="22" height="3" rx="1" fill="#1f2937"/><rect x="14" y="5" width="4" height="18" rx="1" fill="#1f2937"/><line x1="10" y1="27" x2="22" y2="27" stroke="#10b981" stroke-width="2" stroke-linecap="round"/><circle cx="10" cy="27" r="2" fill="#10b981"/></svg>`,
     10, 27,
   ),
+
+  furniture: mkCur(
+    `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32"><rect x="4" y="14" width="24" height="10" rx="2" fill="#dbb892" stroke="#78350f" stroke-width="1.5"/><rect x="4" y="9" width="24" height="7" rx="2" fill="#e7c9a3" stroke="#78350f" stroke-width="1.5"/><rect x="5" y="24" width="3" height="5" fill="#78350f"/><rect x="24" y="24" width="3" height="5" fill="#78350f"/></svg>`,
+    16, 16,
+  ),
 };
 
 export const TIP_MAP: Record<Tool, string> = {
@@ -96,4 +101,5 @@ export const TIP_MAP: Record<Tool, string> = {
   wall:     "1st click → wall start  |  2nd click → wall end (uses Height)  |  Esc → cancel",
   div:      "1st click → center  |  2nd click → corner  |  type text  |  Esc → cancel",
   text:     "Click anywhere → type label → Enter to place  |  Esc → cancel",
+  furniture: "Pick an item from the catalog panel  |  Click on the grid → place it  |  Esc → cancel",
 };

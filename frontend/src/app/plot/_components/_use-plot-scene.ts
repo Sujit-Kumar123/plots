@@ -2,12 +2,14 @@
 
 import { useEffect, useRef, useCallback, useState } from "react";
 import * as THREE from "three";
+import { nanoid } from "nanoid";
 import { TrackballControls } from "three/examples/jsm/controls/TrackballControls.js";
-import type { Tool, BlockInfo, UndoCmd, ShapeAnchor, WallInfo, DivPanelInfo, TextInfo } from "./_types";
+import type { Tool, BlockInfo, UndoCmd, ShapeAnchor, WallInfo, DivPanelInfo, TextInfo, FurnitureInfo } from "./_types";
 import { CURSORS } from "./_constants";
 import { cssColorToInt, cssColorToStr, getSceneBg } from "./_colors";
 import { circlePts, ellipsePts, planeRight, vCirclePts, vEllipsePts } from "./_geometry";
 import { apiCreateSheet, apiGetSheet, apiUpdateSheet, type SheetElements } from "@/lib/services/plot-sheets";
+import type { CatalogItem } from "@/lib/services/plot-catalog";
 
 // ── canvas-based text sprite ──────────────────────────────────────────────────
 function makeTextSprite(text: string, color: string): THREE.Sprite {
@@ -113,6 +115,10 @@ export function usePlotScene(initialSheetId?: string) {
     divPanelInfo: new Map<THREE.Mesh, DivPanelInfo>(),
     textSprites: [] as THREE.Sprite[],
     textInfo:    new Map<THREE.Sprite, TextInfo>(),
+    furnitureMeshes: [] as THREE.Mesh[],
+    furnitureInfo:   new Map<THREE.Mesh, FurnitureInfo>(),
+    furnitureLabels: new Map<THREE.Mesh, THREE.Sprite>(),
+    selectedCatalogItem: null as CatalogItem | null,
     shapeAnchor:  null as ShapeAnchor | null,
     shapePreview: null as THREE.Group | null,
     vertPlane:    null as THREE.Plane | null,
@@ -142,6 +148,7 @@ export function usePlotScene(initialSheetId?: string) {
   const activeDivMeshRef = useRef<THREE.Mesh | null>(null);
   const [curW,          setCurW]          = useState(1);
   const [curD,          setCurD]          = useState(1);
+  const [selectedCatalogItem, setSelectedCatalogItem] = useState<CatalogItem | null>(null);
   const [selCount,      setSelCount]      = useState(0);
   const [rotLocked,     setRotLocked]     = useState(false);
   const [viewMode,      setViewMode]      = useState<"2d" | "3d">("3d");
@@ -440,6 +447,26 @@ export function usePlotScene(initialSheetId?: string) {
     s.textInfo.delete(spr);
   }, []);
 
+  const addFurniture = useCallback((m: THREE.Mesh, info: FurnitureInfo, label: THREE.Sprite) => {
+    const scene = sceneRef.current!;
+    scene.add(m);
+    scene.add(label);
+    const s = stateRef.current;
+    s.furnitureMeshes.push(m);
+    s.furnitureInfo.set(m, info);
+    s.furnitureLabels.set(m, label);
+  }, []);
+
+  const removeFurniture = useCallback((m: THREE.Mesh) => {
+    const scene = sceneRef.current!;
+    const s = stateRef.current;
+    scene.remove(m);
+    s.furnitureMeshes.splice(s.furnitureMeshes.indexOf(m), 1);
+    s.furnitureInfo.delete(m);
+    const label = s.furnitureLabels.get(m);
+    if (label) { scene.remove(label); s.furnitureLabels.delete(m); }
+  }, []);
+
   const commitText = useCallback((text: string) => {
     const anchor = pendingTextRef.current;
     if (!anchor || !text.trim()) { setShowTextInput(false); return; }
@@ -501,6 +528,29 @@ export function usePlotScene(initialSheetId?: string) {
     addBlock(m, info);
     record({ undo: () => removeBlock(m), redo: () => addBlock(m, info) });
   }, [addBlock, removeBlock, record]);
+
+  const placeFurniture = useCallback((pl: { gx: number; gz: number; bottomY: number }, item: CatalogItem) => {
+    const { gx, gz, bottomY } = pl;
+    const info: FurnitureInfo = {
+      id: nanoid(),
+      catalogItemId: item.id,
+      name: item.name,
+      gx, gz, bottomY,
+      rotationY: 0,
+      width: item.width, height: item.height, depth: item.depth,
+      color: item.default_color,
+    };
+    const m = new THREE.Mesh(
+      new THREE.BoxGeometry(item.width - 0.05, item.height, item.depth - 0.05),
+      new THREE.MeshLambertMaterial({ color: item.default_color }),
+    );
+    m.position.set(gx + item.width / 2, bottomY + item.height / 2, gz + item.depth / 2);
+    m.castShadow = true; m.receiveShadow = true;
+    const label = makeTextSprite(item.name, "#1f2937");
+    label.position.set(m.position.x, bottomY + item.height + 0.4, m.position.z);
+    addFurniture(m, info, label);
+    record({ undo: () => removeFurniture(m), redo: () => addFurniture(m, info, label) });
+  }, [addFurniture, removeFurniture, record]);
 
   // ── selection helpers ─────────────────────────────────────────────────────
   const addSel = useCallback((obj: THREE.Mesh | THREE.Line) => {
@@ -771,7 +821,14 @@ export function usePlotScene(initialSheetId?: string) {
     ctrlRef.current!.noRotate = s.rotLocked || t === "pencil" || t === "erase" || s.viewMode === "2d";
     if (rendererRef.current) rendererRef.current.domElement.style.cursor = CURSORS[t] ?? "crosshair";
     setCurTool(t);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clearShapePreview, clearSel]);
+
+  const doSelectCatalogItem = useCallback((item: CatalogItem) => {
+    stateRef.current.selectedCatalogItem = item;
+    setSelectedCatalogItem(item);
+    doTool("furniture");
+  }, [doTool]);
 
   const doColor = useCallback((c: string) => {
     stateRef.current.curColor = c;
@@ -871,6 +928,12 @@ export function usePlotScene(initialSheetId?: string) {
       spr.material.dispose();
     });
     s.textSprites.length = 0; s.textInfo.clear();
+    s.furnitureMeshes.slice().forEach((m) => {
+      sceneRef.current!.remove(m); m.geometry.dispose(); (m.material as THREE.Material).dispose();
+      const label = s.furnitureLabels.get(m);
+      if (label) { sceneRef.current!.remove(label); (label.material as THREE.SpriteMaterial).map?.dispose(); label.material.dispose(); }
+    });
+    s.furnitureMeshes.length = 0; s.furnitureInfo.clear(); s.furnitureLabels.clear();
     s.penLines.slice().forEach((l) => { sceneRef.current!.remove(l); l.geometry.dispose(); (l.material as THREE.Material).dispose(); });
     s.penLines.length = 0;
     s.undoStack.length = 0; s.redoStack.length = 0;
@@ -951,6 +1014,7 @@ export function usePlotScene(initialSheetId?: string) {
       })),
       divPanels: s.divPanels.map(m => ({ ...s.divPanelInfo.get(m)! })),
       textSprites: s.textSprites.map(spr => ({ ...s.textInfo.get(spr)! })),
+      furniturePlacements: s.furnitureMeshes.map(m => ({ ...s.furnitureInfo.get(m)! })),
     };
   }, []);
 
@@ -1059,6 +1123,23 @@ export function usePlotScene(initialSheetId?: string) {
       scene.add(spr);
       s.textSprites.push(spr);
       s.textInfo.set(spr, t);
+    }
+
+    for (const f of (data.elements.furniturePlacements ?? [])) {
+      const mesh = new THREE.Mesh(
+        new THREE.BoxGeometry(f.width - 0.05, f.height, f.depth - 0.05),
+        new THREE.MeshLambertMaterial({ color: f.color }),
+      );
+      mesh.position.set(f.gx + f.width / 2, f.bottomY + f.height / 2, f.gz + f.depth / 2);
+      mesh.rotation.y = f.rotationY;
+      mesh.castShadow = true; mesh.receiveShadow = true;
+      const label = makeTextSprite(f.name, "#1f2937");
+      label.position.set(mesh.position.x, f.bottomY + f.height + 0.4, mesh.position.z);
+      scene.add(mesh);
+      scene.add(label);
+      s.furnitureMeshes.push(mesh);
+      s.furnitureInfo.set(mesh, f);
+      s.furnitureLabels.set(mesh, label);
     }
 
     sheetIdRef.current = id;
@@ -1313,6 +1394,10 @@ export function usePlotScene(initialSheetId?: string) {
 
       if (s.curTool === "block") {
         const pl = getPlacement(e); if (pl) placeBlock(pl);
+      } else if (s.curTool === "furniture") {
+        if (s.selectedCatalogItem) {
+          const pl = getPlacement(e); if (pl) placeFurniture(pl, s.selectedCatalogItem);
+        }
       } else if (s.curTool === "select") {
         setMP(e);
         rayRef.current.setFromCamera(mpRef.current, cameraRef.current!);
@@ -1438,7 +1523,7 @@ export function usePlotScene(initialSheetId?: string) {
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [addSel, removeSel, clearSel, eraseAt, finalizeShape, getPlacement, groundPt,
-      hitVPlane, placeBlock, record, setMP, updateShapePreview, clearShapePreview, defaultVertPlane,
+      hitVPlane, placeBlock, placeFurniture, record, setMP, updateShapePreview, clearShapePreview, defaultVertPlane,
       addDivPanel, removeDivPanel]);
 
   // Load sheet from URL on mount
@@ -1503,5 +1588,7 @@ export function usePlotScene(initialSheetId?: string) {
     doSave,
     doSetSheetName,
     loadScene,
+    selectedCatalogItem,
+    doSelectCatalogItem,
   };
 }

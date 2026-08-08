@@ -6,7 +6,7 @@ metadata:
   labels:
     app: chat-service
 spec:
-  replicas: 3
+  replicas: 1
   selector:
     matchLabels:
       app: chat-service
@@ -18,7 +18,7 @@ spec:
       containers:
         - name: chat-service
           image: plots/chat-service:latest
-          imagePullPolicy: Always
+          imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8001
           envFrom:

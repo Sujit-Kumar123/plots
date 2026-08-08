@@ -6,7 +6,7 @@ metadata:
   labels:
     app: plot-service
 spec:
-  replicas: 3
+  replicas: 1
   selector:
     matchLabels:
       app: plot-service
@@ -18,15 +18,13 @@ spec:
       containers:
         - name: plot-service
           image: plots/plot-service:latest
-          imagePullPolicy: Always
+          imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8003
           envFrom:
             - configMapRef:
                 name: plots-config
           env:
-            - name: DATABASE_URL
-              value: "postgresql+asyncpg://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@postgres:5432/$(POSTGRES_DB)"
             - name: POSTGRES_USER
               valueFrom:
                 secretKeyRef:
@@ -37,6 +35,8 @@ spec:
                 secretKeyRef:
                   name: plots-secrets
                   key: POSTGRES_PASSWORD
+            - name: DATABASE_URL
+              value: "postgresql+asyncpg://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@postgres:5432/$(POSTGRES_DB)"
             - name: INTERNAL_SERVICE_SECRET
               valueFrom:
                 secretKeyRef:

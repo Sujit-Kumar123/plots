@@ -56,6 +56,9 @@ interface SidePanelProps {
   curBorderR: number;
   doBorderW: (v: number) => void;
   doBorderR: (v: number) => void;
+  showCatalog: boolean;
+  onToggleCatalog: () => void;
+  selectedFurnitureName: string | null;
 }
 
 export function SidePanel({
@@ -64,7 +67,7 @@ export function SidePanel({
   sheetId, sheetName, isSaving,
   doTool, doColor, doHeight, doWidth, doDepth, doUndo, doRedo, doFill, doClear,
   doToggleRotation, doPrint, onToggleSheetCfg, doViewMode, doGridStep, doBorderW, doBorderR,
-  doSave, doSetSheetName,
+  doSave, doSetSheetName, showCatalog, onToggleCatalog, selectedFurnitureName,
 }: SidePanelProps) {
   return (
     <div className="absolute top-3 left-3 z-10 bg-card rounded-xl shadow-lg p-3.5 w-48 flex flex-col gap-2 overflow-y-auto max-h-[calc(100vh-24px)] border border-border">
@@ -146,6 +149,13 @@ export function SidePanel({
       )}
 
       <Btn active={curTool === "text"} onClick={() => doTool("text")}>🔤 Text Label</Btn>
+
+      <Btn active={showCatalog} onClick={onToggleCatalog}>🛋️ Furniture Catalog</Btn>
+      {curTool === "furniture" && (
+        <div className="text-[11px] text-muted-foreground bg-muted/50 border border-border rounded-md px-2 py-1">
+          {selectedFurnitureName ? <>Placing: <b className="text-foreground">{selectedFurnitureName}</b></> : "Pick an item from the catalog"}
+        </div>
+      )}
 
       <div className="border-t border-border text-[10px] text-muted-foreground text-center pt-1">── SHAPES ──</div>
 

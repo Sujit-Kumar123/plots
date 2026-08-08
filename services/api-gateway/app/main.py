@@ -18,7 +18,7 @@ from app.common.middleware import RateLimitMiddleware, RequestIDMiddleware, Requ
 from app.config import settings
 from app.database import engine
 from app.middleware import SessionValidationMiddleware
-from app.routers import chat, plot
+from app.routers import catalog, chat, plot
 from app.routers.auth_cookies import router as auth_cookies_router
 from app.routers.backend import (
     admin_router,
@@ -67,6 +67,13 @@ _TAGS = [
         "description": (
             "CQRS plot (sheet) endpoints — proxied to plot-service. "
             "All `/api/v1/plots/*` routes require a valid JWT."
+        ),
+    },
+    {
+        "name": "catalog",
+        "description": (
+            "Furniture catalog endpoints — proxied to plot-service. "
+            "All `/api/v1/catalog/*` routes require a valid JWT."
         ),
     },
     {
@@ -160,6 +167,7 @@ app.add_middleware(RequestIDMiddleware)
 # ── CQRS routes ───────────────────────────────────────────────────────────────
 app.include_router(chat.router, prefix="/api/v1/chat", tags=["chat"])
 app.include_router(plot.router, prefix="/api/v1/plots", tags=["plots"])
+app.include_router(catalog.router, prefix="/api/v1/catalog", tags=["catalog"])
 
 # ── Backend service proxy routes ──────────────────────────────────────────────
 # roles and permissions routers must be registered BEFORE auth_router so that

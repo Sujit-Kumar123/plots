@@ -1,16 +1,33 @@
 "use client";
+import { useState } from "react";
 import { usePlotScene } from "./_use-plot-scene";
 import { SidePanel } from "./side-panel";
 import { SheetConfig } from "./sheet-config";
 import { TipBar } from "./tip-bar";
 import { TextInputOverlay } from "./text-input-overlay";
 import { DivEditOverlay } from "./div-edit-overlay";
+import { CatalogPanel } from "./catalog-panel";
+import type { CatalogItem } from "@/lib/services/plot-catalog";
 
-export default function PlotCanvas({ initialSheetId }: { initialSheetId?: string }) {
+export default function PlotCanvas({
+  initialSheetId,
+  catalogPromise,
+}: {
+  initialSheetId?: string;
+  catalogPromise: Promise<CatalogItem[]>;
+}) {
   const scene = usePlotScene(initialSheetId);
+  const [showCatalog, setShowCatalog] = useState(false);
   return (
     <div className="relative w-screen h-screen overflow-hidden font-sans">
       <div ref={scene.mountRef} className="absolute inset-0" />
+      {showCatalog && (
+        <CatalogPanel
+          catalogPromise={catalogPromise}
+          selectedId={scene.selectedCatalogItem?.id}
+          onSelect={scene.doSelectCatalogItem}
+        />
+      )}
       {scene.showSheetCfg && (
         <SheetConfig
           sheetW={scene.sheetW}
@@ -62,6 +79,9 @@ export default function PlotCanvas({ initialSheetId }: { initialSheetId?: string
         curBorderR={scene.curBorderR}
         doBorderW={scene.doBorderW}
         doBorderR={scene.doBorderR}
+        showCatalog={showCatalog}
+        onToggleCatalog={() => setShowCatalog(v => !v)}
+        selectedFurnitureName={scene.selectedCatalogItem?.name ?? null}
       />
       <TipBar curTool={scene.curTool} />
       {scene.showTextInput && (

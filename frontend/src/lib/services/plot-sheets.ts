@@ -1,7 +1,7 @@
 "use server"
 
 import { cqrsFetch } from "@/lib/server-api"
-import type { BlockInfo, DivPanelInfo, TextInfo, WallInfo } from "@/app/plot/_components/_types"
+import type { BlockInfo, DivPanelInfo, FurnitureInfo, TextInfo, WallInfo } from "@/app/plot/_components/_types"
 
 // ── Serialised element types ──────────────────────────────────────────────────
 
@@ -22,12 +22,15 @@ export type SerializedDivPanel = DivPanelInfo
 
 export type SerializedText = TextInfo
 
+export type SerializedFurniturePlacement = FurnitureInfo
+
 export interface SheetElements {
   blocks: SerializedBlock[]
   penLines: SerializedLine[]
   walls: SerializedWall[]
   divPanels: SerializedDivPanel[]
   textSprites: SerializedText[]
+  furniturePlacements: SerializedFurniturePlacement[]
 }
 
 // ── API response types ────────────────────────────────────────────────────────

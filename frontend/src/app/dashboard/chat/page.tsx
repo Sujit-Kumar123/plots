@@ -104,8 +104,8 @@ function ChatInterface({
 
   const { messages, sendMessage, status, stop, regenerate, error, clearError } = useChat({
     transport,
-    initialMessages,
-    onFinish: (message) => {
+    messages: initialMessages,
+    onFinish: ({ message }) => {
       const text = message.parts.filter(isTextUIPart).map((p) => p.text).join("");
       if (text) saveMessage(sessionId, "assistant", text).catch(() => {});
     },

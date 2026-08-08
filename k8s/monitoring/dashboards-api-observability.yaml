@@ -1,0 +1,100 @@
+# Custom Grafana dashboard for the Plots app services, built for the actual
+# metrics prometheus_fastapi_instrumentator emits (http_request_duration_highr_seconds_*
+# labeled by `job`), unlike the pre-loaded community "FastAPI Observability" dashboard
+# (gnetId 16110 in helm-values.yaml) which expects a different library's metric names
+# (fastapi_requests_total{app_name=...}) and therefore never shows data here.
+#
+# Auto-discovered by the kube-prometheus-stack Grafana sidecar via the
+# `grafana_dashboard: "1"` label (default sidecar.dashboards config) — no helm
+# upgrade needed, just `kubectl apply -f k8s/monitoring/dashboards-api-observability.yaml`.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: plots-api-observability-dashboard
+  namespace: monitoring
+  labels:
+    grafana_dashboard: "1"
+data:
+  plots-api-observability.json: |
+    {
+      "title": "Plots API Observability",
+      "uid": "plots-api-observability",
+      "schemaVersion": 39,
+      "tags": ["plots"],
+      "timezone": "browser",
+      "refresh": "15s",
+      "time": { "from": "now-1h", "to": "now" },
+      "panels": [
+        {
+          "id": 1,
+          "title": "Request Rate by Service",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "expr": "sum(rate(http_request_duration_highr_seconds_count[5m])) by (job)",
+              "legendFormat": "{{job}}",
+              "refId": "A"
+            }
+          ],
+          "fieldConfig": { "defaults": { "unit": "reqps" }, "overrides": [] }
+        },
+        {
+          "id": 2,
+          "title": "P95 Latency by Service",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_highr_seconds_bucket[5m])) by (job, le))",
+              "legendFormat": "{{job}}",
+              "refId": "A"
+            }
+          ],
+          "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] }
+        },
+        {
+          "id": 3,
+          "title": "Total Requests (5m)",
+          "type": "stat",
+          "gridPos": { "h": 6, "w": 6, "x": 0, "y": 8 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "expr": "sum(increase(http_request_duration_highr_seconds_count[5m]))",
+              "refId": "A"
+            }
+          ]
+        },
+        {
+          "id": 4,
+          "title": "Services Being Scraped",
+          "type": "stat",
+          "gridPos": { "h": 6, "w": 6, "x": 6, "y": 8 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "expr": "count(count by (job) (up{namespace=\"plots-system\"} == 1))",
+              "refId": "A"
+            }
+          ]
+        },
+        {
+          "id": 5,
+          "title": "Requests by Handler / Method / Status",
+          "type": "table",
+          "gridPos": { "h": 10, "w": 24, "x": 0, "y": 14 },
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "targets": [
+            {
+              "expr": "sum(rate(http_request_duration_highr_seconds_count[5m])) by (job, handler, method, status)",
+              "format": "table",
+              "instant": true,
+              "refId": "A"
+            }
+          ]
+        }
+      ]
+    }

@@ -9,6 +9,7 @@ from fastapi.responses import JSONResponse
 
 from prometheus_fastapi_instrumentator import Instrumentator
 
+from app.catalog.routers.catalog_router import router as catalog_router
 from app.common.exceptions import register_exception_handlers
 from app.common.responses import ResponseHandler
 from app.common.internal_auth import InternalAuthMiddleware
@@ -24,7 +25,15 @@ _TAGS = [
         "name": "plots",
         "description": (
             "Create, read, update, delete, and search 3-D plot sheets. "
-            "Each plot stores geometry elements (blocks, walls, dividers, text) as JSON."
+            "Each plot stores geometry elements (blocks, walls, dividers, text, "
+            "furniture placements) as JSON."
+        ),
+    },
+    {
+        "name": "catalog",
+        "description": (
+            "Browse and manage the furniture catalog — reference items with "
+            "real-world dimensions that can be placed into a plot's elements."
         ),
     },
 ]
@@ -108,6 +117,7 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
 
 
 app.include_router(router)
+app.include_router(catalog_router)
 
 
 @app.get("/health", tags=["health"], summary="Liveness probe")
